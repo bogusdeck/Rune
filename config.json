@@ -1,0 +1,7 @@
+{
+  "network_interface": "eth0",
+  "alert_threshold": 0.7,
+  "trusted_ports": [22, 80, 443, 53],
+  "baseline_traffic": ["HTTP", "HTTPS", "DNS"],
+  "log_file": "inspector.log"
+}
