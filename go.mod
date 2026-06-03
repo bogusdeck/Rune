@@ -1,4 +1,4 @@
-module notes_maker
+module rune
 
 go 1.25.3
 

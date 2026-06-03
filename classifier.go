@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"rune/internal/core"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -41,13 +43,13 @@ func (m *model) classifyTopic(topic string) tea.Cmd {
 	url := m.ollamaURL
 	model := m.modelName
 	apiKey := m.apiKey
-	prompt := buildClassifierPrompt(topic)
+	prompt := core.BuildClassifierPrompt(topic)
 
 	return func() tea.Msg {
 		start := time.Now()
 		body, _ := json.Marshal(ollamaReq{
 			Model:    model,
-			Messages: []chatMessage{{Role: "user", Content: prompt}},
+			Messages: []ollamaMessage{{Role: "user", Content: prompt}},
 			Stream:   false,
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

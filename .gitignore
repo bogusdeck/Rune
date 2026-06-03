@@ -1,0 +1,10 @@
+.DS_Store
+
+# Build artifacts
+rune
+notes-maker
+dist/
+build/
+
+# Local app state
+*.log

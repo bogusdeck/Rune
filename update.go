@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"rune/internal/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -15,16 +18,24 @@ import (
 // ---- Sending user input ----
 
 func (m *model) sendUserMessage() tea.Cmd {
-	text := strings.TrimSpace(m.chatInput.Value())
-	if text == "" || m.streaming {
+	raw := strings.TrimSpace(m.chatInput.Value())
+	if (raw == "" && len(m.composerImagePaths) == 0) || m.streaming {
+		return nil
+	}
+	cleaned, imagePaths := extractImagePathsAndCleanText(raw)
+	imagePaths = mergeUniqueImagePaths(m.composerImagePaths, imagePaths)
+	text := composeUserMessage(cleaned, imagePaths)
+	if text == "" {
 		return nil
 	}
 	m.chatInput.SetValue("")
-	m.messages = append(m.messages, chatMessage{Role: "user", Content: text})
+	m.composerImagePaths = nil
+	m.messages = append(m.messages, chatMessage{Role: "user", Content: text, ImagePaths: imagePaths})
 	m.displayMsgs = append(m.displayMsgs, displayMsg{Role: "user", Content: text})
 	m.pendingAsst = ""
 	m.streaming = true
 	m.streamHadWrite = false
+	m.refreshSystemPromptForPersonalization()
 	m.refreshChatView()
 	return m.startStreamAndWait()
 }
@@ -82,6 +93,27 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.explorerCursor = 0
 		}
 		log.Printf("explorer toggled: %v", m.showExplorer)
+		return m, nil
+	}
+
+	// Ctrl+O returns to the home screen (topic selection / list).
+	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+o" && (m.state == stateChat || m.state == stateLoading) {
+		m.state = stateTopicInput
+		m.topicList = core.ListExistingTopics("")
+		m.topicCursor = 0
+		if len(m.topicList) == 0 {
+			m.topicCursor = -1
+		} else {
+			for i, t := range m.topicList {
+				if t == m.topic {
+					m.topicCursor = i
+					break
+				}
+			}
+		}
+		m.topicInput.Focus()
+		m.topicInput.SetValue("")
+		log.Printf("returned to home screen (topic selection)")
 		return m, nil
 	}
 
@@ -195,6 +227,21 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if c := m.sendUserMessage(); c != nil {
 				cmds = append(cmds, c)
 			}
+		case "ctrl+j", "shift+enter":
+			if m.activePane == 0 {
+				m.chatInput.InsertRune('\n')
+				m.syncComposerAttachments()
+			}
+		case "backspace":
+			if m.activePane == 0 && strings.TrimSpace(m.chatInput.Value()) == "" && len(m.composerImagePaths) > 0 {
+				m.composerImagePaths = m.composerImagePaths[:len(m.composerImagePaths)-1]
+				break
+			}
+			if m.activePane == 0 {
+				m.chatInput, cmd = m.chatInput.Update(msg)
+				m.syncComposerAttachments()
+				cmds = append(cmds, cmd)
+			}
 		case "tab":
 			if m.activePane == 0 {
 				m.activePane = 1
@@ -216,6 +263,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			if m.activePane == 0 {
 				m.chatInput, cmd = m.chatInput.Update(msg)
+				m.syncComposerAttachments()
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -250,7 +298,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatOpenedAt = time.Now()
 			m.layoutPanes()
 			m.refreshChatView()
-			cmds = append(cmds, m.watchFiles())
+			cmds = append(cmds, m.watchFiles(), m.primePreview())
 		}
 
 	case topicOpenedMsg:
@@ -275,12 +323,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showExplorer = true
 			m.explorerScroll = 0
 			m.explorerCursor = 0
-			m.activePane = 1
+			m.activePane = 0
 		}
 		isNew := !msg.hasSession
 		log.Printf("openTopic topic=%q workDir=%s isNew=%v sessionType=%q preSession=%v", m.topic, m.workDir, isNew, m.sessionType, m.preSession)
-		m.chatInput.Focus()
+		cmds = append(cmds, m.chatInput.Focus())
 		m.chatInput.SetValue("")
+		m.composerImagePaths = nil
 
 		if isNew {
 			m.loadingMessage = fmt.Sprintf("Reading %q… figuring out the best way to start.", m.topic)
@@ -311,7 +360,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 			m.sessionType = ""
 			m.sessionLabel = ""
-			m.messages = []chatMessage{{Role: "system", Content: buildLegacyMainPromptWithProfile(m.topic, m.personalContext())}}
+			m.messages = []chatMessage{{Role: "system", Content: core.BuildLegacyMainPromptWithProfile(m.topic, m.personalContext())}}
 			m.preSession = false
 			m.state = stateChat
 			m.chatOpenedAt = time.Now()
@@ -346,7 +395,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.streamWritten = map[string]bool{}
 		}
 		beforeCount := len(m.streamWritten)
-		written := writeFileBlocks(m.pendingAsst, m.workDir, m.streamWritten)
+		written := core.WriteFileBlocks(m.pendingAsst, m.workDir, m.streamWritten)
 		if len(m.streamWritten) != beforeCount {
 			log.Printf("wrote new file block(s); total this stream: %d", len(m.streamWritten))
 		}
@@ -355,7 +404,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Live preview: route any in-progress <<<FILE>>> body into notesView
 		// rather than letting it render in the chat as raw text.
-		if _, name, partial, ok := splitInProgressFile(m.pendingAsst); ok {
+		if _, name, partial, ok := core.SplitInProgressFile(m.pendingAsst); ok {
 			if m.writingFile != name {
 				log.Printf("live-write START name=%q partial=%d bytes (pending=%d)", name, len(partial), len(m.pendingAsst))
 				m.showExplorer = false
@@ -386,7 +435,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 				m.refreshChatView()
 				cmds = append(cmds, m.startStreamAndWait())
-				return m, firstCmd(cmds...)
+				return m, batchCmds(cmds...)
 			}
 			log.Printf("stream error: %v", msg.err)
 			m.displayMsgs = append(m.displayMsgs, displayMsg{Role: "system", Content: "error: " + msg.err.Error()})
@@ -399,15 +448,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// Make sure any final <<<FILE>>> block from the last chunk has
 			// been committed (idempotent thanks to m.streamWritten).
-			if cmd := m.handleWrittenFiles(writeFileBlocks(m.pendingAsst, m.workDir, m.streamWritten)); cmd != nil {
+			if cmd := m.handleWrittenFiles(core.WriteFileBlocks(m.pendingAsst, m.workDir, m.streamWritten)); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 
 			// final = chat-pane version: completed blocks become "wrote NAME".
-			final := displayClean(m.pendingAsst)
+			final := core.DisplayClean(m.pendingAsst)
 			historyContent := m.pendingAsst
 			if !m.streamHadWrite {
-				if names := writeReceiptNames(final); len(names) > 0 {
+				if names := core.WriteReceiptNames(final); len(names) > 0 {
 					log.Printf("model emitted write receipt without FILE block: %q", strings.Join(names, ", "))
 					final = fmt.Sprintf("I said I wrote %s, but no FILE block was emitted, so no file was created. Please retry the request; I will use the required <<<FILE: ...>>> format.", strings.Join(names, ", "))
 					historyContent = final
@@ -419,7 +468,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// tag from the user-visible message and promote to the main session.
 			promoted := false
 			if m.preSession {
-				if jsonBody, cleaned, ok := extractSessionContext(final); ok {
+				if jsonBody, cleaned, ok := core.ExtractSessionContext(final); ok {
 					final = cleaned
 					log.Printf("pre-session complete — promoting to main session (context len=%d)", len(jsonBody))
 					m.promoteToMainSession(jsonBody)
@@ -441,7 +490,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// drives the next message.
 				m.options = nil
 				m.optionsActive = false
-			} else if opts := extractOptions(final); len(opts) >= 2 {
+			} else if opts := core.ExtractOptions(final); len(opts) >= 2 {
 				// Did the model offer a numbered menu? Activate the picker.
 				m.options = opts
 				m.optionCursor = 0
@@ -462,27 +511,36 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case fileChangedMsg:
 		m.lastFile = string(msg)
-		out := renderFileForWidth(m.lastFile, m.notesView.Width)
-		m.notesView.SetContent(out)
-		m.notesView.GotoTop()
-		log.Printf("preview updated: %s", m.lastFile)
+		cmds = append(cmds, renderFileCmd(m.lastFile, m.notesView.Width))
+
+	case fileRenderedMsg:
+		if msg.path == m.lastFile {
+			m.notesView.SetContent(msg.content)
+			m.notesView.GotoTop()
+			log.Printf("preview updated: %s", m.lastFile)
+		}
 		if m.state == stateChat {
 			cmds = append(cmds, m.watchFiles())
 		}
 	}
 
-	return m, firstCmd(cmds...)
+	return m, batchCmds(cmds...)
 }
 
 func (m *model) openSettings() {
 	m.showSettings = true
+	m.settingsEditor.SetValue(m.config.DocumentEditor)
 	m.settingsProfile.SetValue(m.config.PersonalProfile)
-	_ = m.settingsProfile.Focus()
+	m.settingsFocus = 0
+	m.settingsEditor.Focus()
+	m.settingsProfile.Blur()
 }
 
 func (m *model) closeSettings() {
+	m.config.DocumentEditor = strings.TrimSpace(m.settingsEditor.Value())
 	m.config.PersonalProfile = strings.TrimSpace(m.settingsProfile.Value())
-	saveAppConfig(m.config)
+	core.SaveAppConfig("", m.config)
+	m.settingsEditor.Blur()
 	m.settingsProfile.Blur()
 	m.showSettings = false
 	m.refreshSystemPromptForPersonalization()
@@ -500,11 +558,25 @@ func (m *model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.closeSettings()
 			return m, nil
+		case "tab":
+			m.settingsFocus = 1 - m.settingsFocus
+			if m.settingsFocus == 0 {
+				m.settingsProfile.Blur()
+				m.settingsEditor.Focus()
+			} else {
+				m.settingsEditor.Blur()
+				_ = m.settingsProfile.Focus()
+			}
+			return m, nil
 		case "ctrl+p":
 			m.config.PersonalizedMode = !m.config.PersonalizedMode
-			saveAppConfig(m.config)
+			core.SaveAppConfig("", m.config)
 			return m, nil
 		}
+	}
+	if m.settingsFocus == 0 {
+		m.settingsEditor, cmd = m.settingsEditor.Update(msg)
+		return m, cmd
 	}
 	m.settingsProfile, cmd = m.settingsProfile.Update(msg)
 	return m, cmd
@@ -515,6 +587,8 @@ func (m *model) openReader() {
 		return
 	}
 	m.showReader = true
+	m.readerRawMode = false
+	m.readerStatus = ""
 	m.refreshReaderView()
 }
 
@@ -529,7 +603,7 @@ func (m *model) refreshReaderView() {
 	}
 	m.readerView.Width = w - 4
 	m.readerView.Height = h - 6
-	out := renderFileForWidth(m.lastFile, m.readerView.Width)
+	out := renderReaderFile(m.lastFile, m.readerView.Width, m.readerRawMode)
 	if out == "" {
 		out = "(could not render file)"
 	}
@@ -540,6 +614,21 @@ func (m *model) refreshReaderView() {
 func (m *model) updateReader(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case editorDoneMsg:
+		if msg.path != "" {
+			m.lastFile = msg.path
+		}
+		if msg.err != nil {
+			m.readerStatus = "editor failed: " + msg.err.Error()
+		} else {
+			m.readerStatus = "saved and reloaded"
+		}
+		m.refreshReaderView()
+		if m.lastFile != "" {
+			m.notesView.SetContent("Rendering preview...")
+			return m, renderFileCmd(m.lastFile, m.notesView.Width)
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -549,6 +638,13 @@ func (m *model) updateReader(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc", "q":
 			m.showReader = false
 			return m, nil
+		case "m":
+			m.readerRawMode = !m.readerRawMode
+			m.readerStatus = ""
+			m.refreshReaderView()
+			return m, nil
+		case "e":
+			return m, m.editCurrentReaderFile()
 		case "pgup", "k":
 			m.readerView.HalfViewUp()
 		case "pgdown", "j":
@@ -572,6 +668,34 @@ func (m *model) updateReader(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.readerView, cmd = m.readerView.Update(msg)
 	return m, cmd
+}
+
+func (m *model) editCurrentReaderFile() tea.Cmd {
+	if m.lastFile == "" {
+		m.readerStatus = "no file selected"
+		return nil
+	}
+	editor := configuredEditor(m.config.DocumentEditor)
+	m.readerStatus = "editing with " + editor
+	cmd := exec.Command("/bin/sh", "-lc", editor+" "+shellQuote(m.lastFile))
+	path := m.lastFile
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return editorDoneMsg{path: path, err: err}
+	})
+}
+
+func configuredEditor(configured string) string {
+	if editor := strings.TrimSpace(configured); editor != "" {
+		return editor
+	}
+	if editor := strings.TrimSpace(os.Getenv("EDITOR")); editor != "" {
+		return editor
+	}
+	return "nano"
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
 // ---- Topic-screen update ----
@@ -739,6 +863,7 @@ func (m *model) previewSelectedExplorerFile() tea.Cmd {
 	}
 	m.showExplorer = false
 	m.activePane = 1
+	m.notesView.SetContent("Rendering preview...")
 	return func() tea.Msg {
 		return fileChangedMsg(selected.path)
 	}
@@ -784,7 +909,7 @@ func (m *model) selectExplorerPath(path string) {
 func (m *model) beginOpenTopic(topic string) tea.Cmd {
 	home, _ := os.UserHomeDir()
 	m.topic = topic
-	m.workDir = filepath.Join(home, "notes", slugify(topic))
+	m.workDir = filepath.Join(home, "notes", core.Slugify(topic))
 	m.messages = nil
 	m.displayMsgs = nil
 	m.sessionType = ""
@@ -796,6 +921,11 @@ func (m *model) beginOpenTopic(topic string) tea.Cmd {
 	m.pendingAsst = ""
 	m.streaming = false
 	m.streamHadWrite = false
+	m.writingFile = ""
+	m.livePreviewSize = 0
+	m.lastFile = ""
+	m.composerImagePaths = nil
+	m.notesView.SetContent("")
 	m.showExplorer = false
 	m.explorerScroll = 0
 	m.explorerCursor = 0
@@ -815,7 +945,7 @@ func openTopicData(topic, workDir string) tea.Cmd {
 		if err := os.MkdirAll(workDir, 0o755); err != nil {
 			return topicOpenedMsg{topic: topic, workDir: workDir, err: err}
 		}
-		session, ok := loadSessionFile(workDir)
+		session, ok := core.LoadSessionFile(workDir)
 		log.Printf("openTopicData done: topic=%q hasSession=%v elapsed=%s", topic, ok, time.Since(start))
 		return topicOpenedMsg{
 			topic:      topic,
@@ -850,13 +980,17 @@ func waitForLoadingMsg(ch chan tea.Msg) tea.Cmd {
 	}
 }
 
-func firstCmd(cmds ...tea.Cmd) tea.Cmd {
+func batchCmds(cmds ...tea.Cmd) tea.Cmd {
+	var nonNil []tea.Cmd
 	for _, cmd := range cmds {
 		if cmd != nil {
-			return cmd
+			nonNil = append(nonNil, cmd)
 		}
 	}
-	return nil
+	if len(nonNil) == 0 {
+		return nil
+	}
+	return tea.Batch(nonNil...)
 }
 
 func (m *model) runLoadingWork(cmd tea.Cmd) tea.Cmd {
@@ -896,20 +1030,18 @@ func openChatAfter(d time.Duration) tea.Cmd {
 }
 
 // livePreviewMinDelta is the smallest growth (in bytes) of the in-progress
-// file body that justifies a re-render of the notes preview. Glamour is
-// expensive enough that re-running it on every chunk would chew CPU; this
-// throttle keeps the preview feeling live without burning frames.
-const livePreviewMinDelta = 24
+// file body that justifies repainting the notes preview. Live writes render
+// raw markdown instead of Glamour so the typing effect stays immediate.
+const livePreviewMinDelta = 8
 
 // updateLivePreview pushes the partial body of an in-progress <<<FILE>>>
-// block into the notes preview pane. Throttled by livePreviewMinDelta so
-// glamour rendering stays cheap during fast streams.
+// block into the notes preview pane as raw text with a cursor. The final
+// fileChangedMsg renders the saved markdown once the block is complete.
 func (m *model) updateLivePreview(name, body string) {
 	if name == "" {
 		return
 	}
 	full := filepath.Join(m.workDir, name)
-	// Always update the header label so the user sees the right filename.
 	m.lastFile = full
 	if len(body)-m.livePreviewSize < livePreviewMinDelta && m.livePreviewSize != 0 {
 		return
@@ -917,34 +1049,28 @@ func (m *model) updateLivePreview(name, body string) {
 	log.Printf("live-preview paint name=%q body=%d bytes (notesView w=%d)", name, len(body), m.notesView.Width)
 	m.livePreviewSize = len(body)
 
-	ext := strings.TrimPrefix(filepath.Ext(name), ".")
-	var rendered string
-	if ext == "" || ext == "md" || ext == "markdown" {
-		rendered = fmt.Sprintf("# %s _(writing…)_\n\n%s", name, body)
-	} else {
-		rendered = fmt.Sprintf("# %s _(writing…)_\n\n```%s\n%s\n```\n", name, ext, body)
+	if strings.TrimSpace(body) == "" {
+		body = "waiting for file content..."
 	}
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(m.notesView.Width),
-	)
-	if err != nil {
-		return
-	}
-	out, err := renderer.Render(rendered)
-	if err != nil {
-		return
-	}
+	ruleWidth := max(8, min(len(name)+8, m.notesView.Width))
+	out := fmt.Sprintf("writing %s\n%s\n\n%s▍", name, strings.Repeat("-", ruleWidth), body)
 	m.notesView.SetContent(out)
 	m.notesView.GotoBottom()
 }
 
 func renderFileForWidth(path string, width int) string {
+	return renderReaderFile(path, width, false)
+}
+
+func renderReaderFile(path string, width int, raw bool) string {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
 	body := string(content)
+	if raw {
+		return body
+	}
 	ext := strings.TrimPrefix(filepath.Ext(path), ".")
 	if ext != "" && ext != "md" && ext != "markdown" {
 		body = fmt.Sprintf("# %s\n\n```%s\n%s\n```\n", filepath.Base(path), ext, body)
@@ -966,10 +1092,10 @@ func renderFileForWidth(path string, width int) string {
 func (m *model) startPreSession() tea.Cmd {
 	var systemPrompt string
 	if m.sessionType == "research" {
-		systemPrompt = buildPreSessionResearchPromptWithProfile(m.topic, m.personalContext())
+		systemPrompt = core.BuildPreSessionResearchPromptWithProfile(m.topic, m.personalContext())
 	} else {
 		// Default to the skill track for any unknown classification.
-		systemPrompt = buildPreSessionSkillPromptWithProfile(m.topic, m.personalContext())
+		systemPrompt = core.BuildPreSessionSkillPromptWithProfile(m.topic, m.personalContext())
 	}
 	m.messages = []chatMessage{
 		{Role: "system", Content: systemPrompt},
@@ -992,30 +1118,36 @@ func (m *model) promoteToMainSession(contextJSON string) {
 	m.sessionContext = contextJSON
 	m.preSession = false
 	if len(m.messages) > 0 && m.messages[0].Role == "system" {
-		m.messages[0].Content = buildMainSessionPromptWithProfile(contextJSON, m.personalContext())
+		m.messages[0].Content = core.BuildMainSessionPromptWithProfile(contextJSON, m.personalContext())
 	} else {
-		m.messages = append([]chatMessage{{Role: "system", Content: buildMainSessionPromptWithProfile(contextJSON, m.personalContext())}}, m.messages...)
+		m.messages = append([]chatMessage{{Role: "system", Content: core.BuildMainSessionPromptWithProfile(contextJSON, m.personalContext())}}, m.messages...)
 	}
+	m.refreshSystemPromptForPersonalization()
 }
 
 func (m *model) personalContext() string {
-	return personalizedContext(m.config.PersonalProfile, m.config.PersonalizedMode)
+	return core.PersonalizedContext(m.config.PersonalProfile, m.config.PersonalizedMode)
 }
 
 func (m *model) refreshSystemPromptForPersonalization() {
 	if len(m.messages) == 0 || m.messages[0].Role != "system" {
 		return
 	}
+	var base string
 	switch {
 	case m.sessionContext != "":
-		m.messages[0].Content = buildMainSessionPromptWithProfile(m.sessionContext, m.personalContext())
+		base = core.BuildMainSessionPromptWithProfile(m.sessionContext, m.personalContext())
 	case m.preSession && m.sessionType == "research":
-		m.messages[0].Content = buildPreSessionResearchPromptWithProfile(m.topic, m.personalContext())
+		base = core.BuildPreSessionResearchPromptWithProfile(m.topic, m.personalContext())
 	case m.preSession:
-		m.messages[0].Content = buildPreSessionSkillPromptWithProfile(m.topic, m.personalContext())
+		base = core.BuildPreSessionSkillPromptWithProfile(m.topic, m.personalContext())
 	default:
-		m.messages[0].Content = buildLegacyMainPromptWithProfile(m.topic, m.personalContext())
+		base = core.BuildLegacyMainPromptWithProfile(m.topic, m.personalContext())
 	}
+	if !m.preSession {
+		base += "\n\n" + m.currentFilesContext()
+	}
+	m.messages[0].Content = base
 	m.saveSession()
 }
 
@@ -1048,6 +1180,7 @@ func (m *model) rewindOnce() bool {
 		return false
 	}
 	stashed := m.messages[lastUser].Content
+	stashedImages := append([]string(nil), m.messages[lastUser].ImagePaths...)
 	m.messages = m.messages[:lastUser]
 
 	// Mirror the truncation in the rendered transcript: drop everything from
@@ -1063,7 +1196,8 @@ func (m *model) rewindOnce() bool {
 
 	// Restore the popped text into the input so the user can edit and resend.
 	m.chatInput.SetValue(stashed)
-	m.chatInput.SetCursor(len(stashed))
+	m.chatInput.CursorEnd()
+	m.composerImagePaths = stashedImages
 
 	// Clear any transient state tied to the message we just removed.
 	m.options = nil
@@ -1147,7 +1281,18 @@ func (m *model) pickOption(idx int) tea.Cmd {
 	m.optionsActive = false
 	m.options = nil
 	m.chatInput.SetValue(selected)
+	m.composerImagePaths = nil
 	return m.sendUserMessage()
+}
+
+func (m *model) syncComposerAttachments() {
+	cleaned, paths := extractImagePathsAndCleanText(m.chatInput.Value())
+	if len(paths) == 0 {
+		return
+	}
+	m.composerImagePaths = mergeUniqueImagePaths(m.composerImagePaths, paths)
+	m.chatInput.SetValue(cleaned)
+	m.chatInput.CursorEnd()
 }
 
 // isTerminalNoise returns true when msg is almost certainly not real user
@@ -1158,13 +1303,20 @@ func (m *model) pickOption(idx int) tea.Cmd {
 func isTerminalNoise(msg tea.KeyMsg, mountedAt time.Time) bool {
 	// Alt-modified keys: we never bind anything to alt+X, and the terminal's
 	// escape responses always start with alt+] or alt+\\ (the leading ESC byte).
+	// However, we must allow alt+left, alt+right, alt+b, alt+f, alt+pgup, alt+pgdown for navigation.
 	if msg.Alt {
+		s := msg.String()
+		if s == "alt+left" || s == "alt+right" || s == "alt+b" || s == "alt+f" || s == "alt+pgup" || s == "alt+pgdown" {
+			return false
+		}
 		return true
 	}
-	// Multi-rune KeyRunes events are never produced by typing — humans hit
-	// one key at a time. They are always payload chunks of an OSC/CSI
-	// response (e.g. "11;rgb:0a0a/0e0e/1414").
+	// Some terminals deliver paste/drop payloads as one multi-rune KeyRunes
+	// event. Keep those, but still drop obvious OSC/CSI response chunks.
 	if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
+		if looksLikeDroppedPathChunk(string(msg.Runes)) {
+			return false
+		}
 		return true
 	}
 	// Belt-and-suspenders: drop anything in the first 400ms after the chat
@@ -1173,4 +1325,100 @@ func isTerminalNoise(msg tea.KeyMsg, mountedAt time.Time) bool {
 		return true
 	}
 	return false
+}
+
+func looksLikeDroppedPathChunk(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "file://") {
+		return true
+	}
+	lines := strings.Split(s, "\n")
+	for _, line := range lines {
+		if _, ok := parseDroppedImagePath(line); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func prevWordStart(val string, pos int) int {
+	if pos <= 0 {
+		return 0
+	}
+	runes := []rune(val)
+	if pos > len(runes) {
+		pos = len(runes)
+	}
+
+	i := pos - 1
+	// Skip trailing whitespace
+	for i >= 0 && (runes[i] == ' ' || runes[i] == '\t' || runes[i] == '\n' || runes[i] == '\r') {
+		i--
+	}
+	// Skip word characters
+	if i >= 0 {
+		isWordChar := (runes[i] >= 'a' && runes[i] <= 'z') || (runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= '0' && runes[i] <= '9') || runes[i] == '_'
+		for i >= 0 && ((runes[i] >= 'a' && runes[i] <= 'z') || (runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= '0' && runes[i] <= '9') || runes[i] == '_') == isWordChar && !(runes[i] == ' ' || runes[i] == '\t' || runes[i] == '\n' || runes[i] == '\r') {
+			i--
+		}
+	}
+	return i + 1
+}
+
+func nextWordStart(val string, pos int) int {
+	runes := []rune(val)
+	if pos >= len(runes) {
+		return len(runes)
+	}
+
+	i := pos
+	// Skip word characters
+	isWordChar := (runes[i] >= 'a' && runes[i] <= 'z') || (runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= '0' && runes[i] <= '9') || runes[i] == '_'
+	for i < len(runes) && ((runes[i] >= 'a' && runes[i] <= 'z') || (runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= '0' && runes[i] <= '9') || runes[i] == '_') == isWordChar && !(runes[i] == ' ' || runes[i] == '\t' || runes[i] == '\n' || runes[i] == '\r') {
+		i++
+	}
+	// Skip trailing whitespace to reach the start of the next word
+	for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t' || runes[i] == '\n' || runes[i] == '\r') {
+		i++
+	}
+	return i
+}
+
+func renderFileCmd(path string, width int) tea.Cmd {
+	return func() tea.Msg {
+		out := renderFileForWidth(path, width)
+		return fileRenderedMsg{path: path, content: out}
+	}
+}
+
+func (m *model) currentFilesContext() string {
+	files := listWorkspaceFiles(m.workDir)
+	if len(files) == 0 {
+		return "Files currently existing in the notes directory: (none yet)"
+	}
+	return "Files currently existing in the notes directory:\n- " + strings.Join(files, "\n- ")
+}
+
+func listWorkspaceFiles(dir string) []string {
+	entries := readTreeEntries(dir)
+	var files []string
+	var walk func([]treeEntry, string)
+	walk = func(items []treeEntry, prefix string) {
+		for _, item := range items {
+			rel := item.name
+			if prefix != "" {
+				rel = prefix + "/" + item.name
+			}
+			if item.isDir {
+				walk(item.children, rel)
+			} else {
+				files = append(files, rel)
+			}
+		}
+	}
+	walk(entries, "")
+	return files
 }

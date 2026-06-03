@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"rune/internal/core"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -21,7 +23,7 @@ import (
 func probeModel(url, modelName, apiKey string) error {
 	body, _ := json.Marshal(ollamaReq{
 		Model:    modelName,
-		Messages: []chatMessage{{Role: "user", Content: "ping"}},
+		Messages: []ollamaMessage{{Role: "user", Content: "ping"}},
 		Stream:   false,
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -48,9 +50,15 @@ func probeModel(url, modelName, apiKey string) error {
 
 // ollamaReq matches the request body of POST /api/chat.
 type ollamaReq struct {
-	Model    string        `json:"model"`
-	Messages []chatMessage `json:"messages"`
-	Stream   bool          `json:"stream"`
+	Model    string          `json:"model"`
+	Messages []ollamaMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+}
+
+type ollamaMessage struct {
+	Role    string   `json:"role"`
+	Content string   `json:"content"`
+	Images  []string `json:"images,omitempty"`
 }
 
 // ollamaStreamResp matches a single newline-delimited JSON object from a
@@ -69,7 +77,7 @@ func (m *model) startStream() tea.Cmd {
 	apiKey := m.apiKey
 	msgs := llmMessages(m.messages)
 	if !m.preSession {
-		msgs = append(msgs, chatMessage{Role: "system", Content: fileBlockReminderPrompt})
+		msgs = append(msgs, ollamaMessage{Role: "system", Content: fileBlockReminderPrompt})
 	}
 	ch := m.streamCh
 	return func() tea.Msg {
@@ -123,18 +131,24 @@ func (m *model) startStream() tea.Cmd {
 	}
 }
 
-func llmMessages(messages []chatMessage) []chatMessage {
-	out := append([]chatMessage(nil), messages...)
-	for i := range out {
-		if out[i].Role == "assistant" && isOnlyWriteReceipt(out[i].Content) {
-			out[i].Content = "The host displayed a legacy file-write receipt here. The original FILE block content is unavailable in this saved history. Do not imitate this receipt; use a full <<<FILE: ...>>>...<<<END>>> block when writing files."
+func llmMessages(messages []chatMessage) []ollamaMessage {
+	out := make([]ollamaMessage, 0, len(messages))
+	for _, msg := range messages {
+		content := msg.Content
+		if msg.Role == "assistant" && isOnlyWriteReceipt(content) {
+			content = "The host displayed a legacy file-write receipt here. The original FILE block content is unavailable in this saved history. Do not imitate this receipt; use a full <<<FILE: ...>>>...<<<END>>> block when writing files."
 		}
+		out = append(out, ollamaMessage{
+			Role:    msg.Role,
+			Content: content,
+			Images:  encodeLocalImages(msg.ImagePaths),
+		})
 	}
 	return out
 }
 
 func isOnlyWriteReceipt(s string) bool {
-	if len(writeReceiptNames(s)) == 0 {
+	if len(core.WriteReceiptNames(s)) == 0 {
 		return false
 	}
 	for _, line := range strings.Split(s, "\n") {

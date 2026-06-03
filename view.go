@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"rune/internal/core"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -38,17 +40,25 @@ func (m *model) layout() {
 
 func (m *model) layoutPanes() {
 	leftPaneWidth, rightPaneWidth := m.splitPaneWidths()
-	paneHeight := m.height - 4
+	paneHeight := m.height - 5
+	composerHeight := m.chatComposerHeight()
 
 	m.chatView.Width = leftPaneWidth - 2
-	m.chatView.Height = paneHeight - 4
+	m.chatView.Height = max(6, paneHeight-composerHeight-4)
 
 	m.notesView.Width = rightPaneWidth - 2
 	m.notesView.Height = paneHeight - 2
 
-	m.chatInput.Width = leftPaneWidth - 6
+	m.chatInput.SetWidth(max(20, leftPaneWidth-8))
+	m.chatInput.SetHeight(composerHeight)
+	m.settingsEditor.Width = max(20, m.width-8)
 	m.settingsProfile.SetWidth(max(20, m.width-8))
 	m.settingsProfile.SetHeight(max(6, m.height-12))
+}
+
+func (m *model) chatComposerHeight() int {
+	lines := strings.Count(m.chatInput.Value(), "\n") + 1
+	return max(3, min(6, lines))
 }
 
 func (m *model) splitPaneWidths() (int, int) {
@@ -126,7 +136,7 @@ func (m *model) refreshChatView() {
 		// splitInProgressFile already runs displayClean on the buffer, so
 		// completed FILE blocks come back as "wrote NAME" markers and only an
 		// in-progress block (if any) remains as a raw open tag.
-		cleaned, name, _, inProgress := splitInProgressFile(m.pendingAsst)
+		cleaned, name, _, inProgress := core.SplitInProgressFile(m.pendingAsst)
 		switch {
 		case inProgress:
 			cleaned = strings.TrimRight(cleaned, "\n")
@@ -242,7 +252,7 @@ func (m *model) View() string {
 	}
 
 	leftPaneWidth, rightPaneWidth := m.splitPaneWidths()
-	paneHeight := m.height - 4
+	paneHeight := m.height - 5
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")).Padding(0, 1)
 	loc := "local"
@@ -261,7 +271,7 @@ func (m *model) View() string {
 	if m.sessionLabel != "" {
 		phase += " · " + m.sessionLabel
 	}
-	header := headerStyle.Render(fmt.Sprintf("NOTES MAKER — %s  (%s)  model: %s [%s]%s",
+	header := headerStyle.Render(fmt.Sprintf("RUNE — %s  (%s)  model: %s [%s]%s",
 		m.topic, m.workDir, m.modelName, loc, phase))
 
 	paneStyle := func(active bool) lipgloss.Style {
@@ -294,12 +304,20 @@ func (m *model) View() string {
 	}
 
 	sep := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Repeat("─", leftPaneWidth-2))
-	inputLine := lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Render("> ") + m.chatInput.View()
+	inputHint := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("enter: send  •  shift+enter / ctrl+j: newline")
+	inputBox := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("99")).
+		Padding(0, 1).
+		Render(m.chatInput.View())
+	attachments := m.renderComposerAttachments(leftPaneWidth - 2)
 
 	leftInner := lipgloss.JoinVertical(lipgloss.Left,
 		m.chatView.View(),
 		sep,
-		inputLine,
+		inputBox,
+		attachments,
+		inputHint,
 	)
 	leftPane := paneStyle(m.activePane == 0).Render(leftInner)
 
@@ -314,7 +332,11 @@ func (m *model) View() string {
 		if m.lastFile == "" {
 			previewName = "(no file yet)"
 		}
-		rightLabel = fmt.Sprintf(" [2] Notes Preview: %s ", previewName)
+		if m.writingFile != "" {
+			rightLabel = fmt.Sprintf(" [2] Writing: %s ", m.writingFile)
+		} else {
+			rightLabel = fmt.Sprintf(" [2] Notes Preview: %s ", previewName)
+		}
 	}
 	rightPane := rightPaneStyle(m.activePane == 1).Render(rightInner)
 
@@ -329,37 +351,61 @@ func (m *model) View() string {
 	} else if m.optionsActive {
 		statusLine = "  • picker active (↑↓ / 1–9 / enter / esc)"
 	}
-	help := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(
-		" ctrl+c: quit  •  tab: switch pane  •  enter: reader/preview file  •  arrows/pgup/pgdn: scroll active pane  •  ctrl+r: rewind  •  ctrl+e: explorer  •  ctrl+t: settings  •  ctrl+l: logs" + statusLine)
+
+	row1 := " ctrl+c: quit  •  tab: switch pane  •  enter: reader/preview file"
+	row2 := " ctrl+o: home  •  ctrl+e: explorer  •  ctrl+t: settings  •  ctrl+r: rewind  •  ctrl+l: logs" + statusLine
+	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	help := lipgloss.JoinVertical(lipgloss.Left,
+		helpStyle.Render(row1),
+		helpStyle.Render(row2),
+	)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, panes, help)
+}
+
+func (m *model) renderComposerAttachments(width int) string {
+	if len(m.composerImagePaths) == 0 {
+		return ""
+	}
+	label := lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true).Render("attachments")
+	chipStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("63")).
+		Foreground(lipgloss.Color("252")).
+		Padding(0, 1)
+	var chips []string
+	for _, path := range m.composerImagePaths {
+		chips = append(chips, chipStyle.Render("image: "+truncatePlain(filepath.Base(path), max(12, width/3))))
+	}
+	help := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("backspace on empty input removes last attachment")
+	return lipgloss.JoinVertical(lipgloss.Left, label, lipgloss.JoinHorizontal(lipgloss.Left, chips...), help)
 }
 
 // ---- Topic-selection screen ----
 
 func (m *model) viewTopicScreen() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213"))
+	accentA := lipgloss.Color("213")
+	accentB := lipgloss.Color("99")
+	accentC := lipgloss.Color("81")
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("75"))
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(accentC)
+	cardBorder := lipgloss.Color("62")
 	selectedItem := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("230")).
 		Background(lipgloss.Color("57")).
 		Bold(true)
+	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 
-	width := 78
+	width := 96
 	if m.width > 0 {
-		width = min(92, max(56, m.width-8))
+		width = min(116, max(72, m.width-8))
 	}
 	listHeight := 8
 	if m.height > 0 {
-		listHeight = max(4, min(10, m.height-16))
+		listHeight = max(4, min(10, m.height-24))
 	}
-
-	var body strings.Builder
-	body.WriteString(titleStyle.Render("NOTES MAKER") + "\n")
-	body.WriteString(mutedStyle.Render("Study notes, live preview, reusable context") + "\n\n")
 
 	mode := "off"
 	if m.config.PersonalizedMode {
@@ -373,59 +419,131 @@ func (m *model) viewTopicScreen() string {
 	if m.usingCloud {
 		cloudState = "cloud"
 	}
-	body.WriteString(labelStyle.Render("Config") + "\n")
-	body.WriteString(fmt.Sprintf("  model: %s  [%s]\n", m.modelName, cloudState))
-	body.WriteString(fmt.Sprintf("  personalized mode: %s  profile: %s\n", mode, profileState))
-	body.WriteString(fmt.Sprintf("  notes: %s\n\n", notesRoot()))
 
+	logo := renderRuneLogo(width - 8)
+	tagline := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("254")).Render("Terminal notes for learning and research")
+	subtitle := mutedStyle.Render("Live preview • reusable context • focused topic sessions")
+
+	hero := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(accentB).
+		Padding(1, 2).
+		Render(lipgloss.JoinVertical(lipgloss.Left, logo, tagline, subtitle))
+
+	statsLine := lipgloss.JoinHorizontal(lipgloss.Top,
+		homeBadge("Model", truncatePlain(m.modelName, 28), accentA),
+		homeBadge("Mode", cloudState, accentB),
+		homeBadge("Profile", profileState, accentC),
+		homeBadge("Topics", fmt.Sprintf("%d", len(m.topicList)), lipgloss.Color("111")),
+	)
+
+	var recent strings.Builder
+	recent.WriteString(labelStyle.Render("Recent Topics") + "\n")
 	if len(m.topicList) > 0 {
-		body.WriteString(labelStyle.Render("Previous Conversations") + "\n")
 		start := 0
 		if m.topicCursor >= listHeight {
 			start = m.topicCursor - listHeight + 1
 		}
 		end := min(len(m.topicList), start+listHeight)
 		if start > 0 {
-			body.WriteString(metaStyle.Render(fmt.Sprintf("  ... %d above", start)) + "\n")
+			recent.WriteString(metaStyle.Render(fmt.Sprintf("... %d above", start)) + "\n")
 		}
 		for i := start; i < end; i++ {
-			t := m.topicList[i]
-			line := fmt.Sprintf("  %-38s", truncatePlain(t, 38))
+			t := truncatePlain(m.topicList[i], 36)
 			if i == m.topicCursor {
-				body.WriteString(selectedItem.Render("› "+truncatePlain(t, 40)) + "\n")
+				recent.WriteString(selectedItem.Width(40).Render("› "+t) + "\n")
 			} else {
-				body.WriteString(itemStyle.Render(line) + "\n")
+				recent.WriteString(itemStyle.Render("  "+t) + "\n")
 			}
 		}
 		if end < len(m.topicList) {
-			body.WriteString(metaStyle.Render(fmt.Sprintf("  ... %d more", len(m.topicList)-end)) + "\n")
+			recent.WriteString(metaStyle.Render(fmt.Sprintf("... %d more", len(m.topicList)-end)) + "\n")
 		}
-		body.WriteString("\n")
 	} else {
-		body.WriteString(labelStyle.Render("Previous Conversations") + "\n")
-		body.WriteString(metaStyle.Render("  No saved topics yet.") + "\n\n")
+		recent.WriteString(metaStyle.Render("No saved topics yet. Start with a fresh one.") + "\n")
 	}
 
-	newLabel := labelStyle.Render("New Topic")
-	if m.topicCursor < 0 {
-		newLabel = selectedItem.Render("› New Topic")
-	}
-	body.WriteString(newLabel + "\n")
-	body.WriteString(m.topicInput.View() + "\n\n")
-
-	body.WriteString(metaStyle.Render("enter: open  •  ↑/↓: select  •  type: new topic  •  ctrl+t: settings  •  ctrl+c: quit"))
-
-	box := lipgloss.NewStyle().
+	recentCard := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("62")).
+		BorderForeground(cardBorder).
+		Padding(1, 2).
+		Width(46).
+		Render(recent.String())
+
+	configBody := lipgloss.JoinVertical(lipgloss.Left,
+		labelStyle.Render("Session Setup"),
+		textStyle.Render(fmt.Sprintf("Personalized mode: %s", mode)),
+		textStyle.Render(fmt.Sprintf("Notes directory: %s", truncatePlain(notesRoot(), 42))),
+		textStyle.Render(""),
+		labelStyle.Render("New Topic"),
+		m.topicInput.View(),
+		metaStyle.Render("Examples: Java, Kubernetes, Linear Algebra, System Design"),
+	)
+	if m.topicCursor < 0 {
+		configBody = lipgloss.JoinVertical(lipgloss.Left,
+			labelStyle.Render("Session Setup"),
+			textStyle.Render(fmt.Sprintf("Personalized mode: %s", mode)),
+			textStyle.Render(fmt.Sprintf("Notes directory: %s", truncatePlain(notesRoot(), 42))),
+			textStyle.Render(""),
+			selectedItem.Render("› New Topic"),
+			m.topicInput.View(),
+			metaStyle.Render("Examples: Java, Kubernetes, Linear Algebra, System Design"),
+		)
+	}
+	setupCard := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(cardBorder).
+		Padding(1, 2).
+		Width(46).
+		Render(configBody)
+
+	content := lipgloss.JoinHorizontal(lipgloss.Top, recentCard, "  ", setupCard)
+
+	footer := mutedStyle.Render("enter: open  •  ↑/↓: select topic  •  type: create new topic  •  ctrl+t: settings  •  ctrl+c: quit")
+
+	shell := lipgloss.NewStyle().
+		BorderStyle(lipgloss.ThickBorder()).
+		BorderForeground(accentB).
 		Padding(1, 2).
 		Width(width).
-		Render(body.String())
+		Render(lipgloss.JoinVertical(lipgloss.Left, hero, "", statsLine, "", content, "", footer))
 
 	if m.width > 0 && m.height > 0 {
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, shell)
 	}
-	return box
+	return shell
+}
+
+func renderRuneLogo(maxWidth int) string {
+	lines := []string{
+		"██████╗ ██╗   ██╗███╗   ██╗███████╗",
+		"██╔══██╗██║   ██║████╗  ██║██╔════╝",
+		"██████╔╝██║   ██║██╔██╗ ██║█████╗  ",
+		"██╔══██╗██║   ██║██║╚██╗██║██╔══╝  ",
+		"██║  ██║╚██████╔╝██║ ╚████║███████╗",
+		"╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝",
+	}
+	colors := []lipgloss.Color{"213", "177", "141", "105", "69", "63"}
+	var out []string
+	for i, line := range lines {
+		styled := lipgloss.NewStyle().Bold(true).Foreground(colors[i%len(colors)]).Render(line)
+		out = append(out, styled)
+	}
+	logo := strings.Join(out, "\n")
+	if maxWidth > 0 {
+		return lipgloss.NewStyle().MaxWidth(maxWidth).Render(logo)
+	}
+	return logo
+}
+
+func homeBadge(label, value string, border lipgloss.Color) string {
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(border)
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	return lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(border).
+		Padding(0, 1).
+		Render(labelStyle.Render(label) + "  " + valueStyle.Render(value))
 }
 
 func notesRoot() string {
@@ -461,7 +579,11 @@ func (m *model) viewSettingsScreen() string {
 	header := lipgloss.JoinVertical(lipgloss.Left,
 		titleStyle.Render("SETTINGS"),
 		fmt.Sprintf("%s %s", labelStyle.Render("Personalized mode:"), mode),
-		helpStyle.Render("ctrl+p: toggle  •  esc/ctrl+t: save and close"),
+		helpStyle.Render("tab: switch field  •  ctrl+p: toggle  •  esc/ctrl+t: save and close"),
+		"",
+		labelStyle.Render("Document editor"),
+		helpStyle.Render("Used by reader edit mode. Examples: vim, nano, emacs, code --wait."),
+		m.settingsEditor.View(),
 		"",
 		labelStyle.Render("User keypoints"),
 		helpStyle.Render("Keep stable facts here: education, experience, goals, preferences, recurring context."),
@@ -497,7 +619,17 @@ func (m *model) viewReaderScreen() string {
 	}
 	title := titleStyle.Render("READER")
 	path := pathStyle.Render(name)
-	help := helpStyle.Render("esc/q: back  •  up/down/pgup/pgdn: scroll  •  g/G: top/bottom")
+	mode := "rendered markdown"
+	if m.readerRawMode {
+		mode = "raw markdown"
+	}
+	modeLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Render(mode)
+	help := helpStyle.Render("m: toggle raw/render  •  esc/q: back  •  up/down/pgup/pgdn: scroll  •  g/G: top/bottom")
+	if m.readerStatus != "" {
+		help = helpStyle.Render(m.readerStatus + "  •  e: edit  •  m: toggle raw/render  •  esc/q: back")
+	} else {
+		help = helpStyle.Render("e: edit  •  m: toggle raw/render  •  esc/q: back  •  up/down/pgup/pgdn: scroll  •  g/G: top/bottom")
+	}
 
 	box := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -507,7 +639,7 @@ func (m *model) viewReaderScreen() string {
 		Render(m.readerView.View())
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		title+"  "+path,
+		title+"  "+path+"  "+modeLabel,
 		box,
 		help,
 	)
@@ -517,7 +649,7 @@ func (m *model) viewReaderScreen() string {
 
 func (m *model) viewLoadingScreen() string {
 	spinner := loadingSpinner(m.loadingFrame)
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213")).Render("NOTES MAKER")
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213")).Render("RUNE")
 	msg := m.loadingMessage
 	if msg == "" {
 		msg = "Preparing…"

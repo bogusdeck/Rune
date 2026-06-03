@@ -5,13 +5,14 @@ import (
 	"os"
 	"time"
 
-	"notes_maker/pkg/core"
+	"rune/internal/core"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ---- App state ----
@@ -38,8 +39,16 @@ const (
 // ---- Bubble-tea messages ----
 
 type fileChangedMsg string
+type fileRenderedMsg struct {
+	path    string
+	content string
+}
 type streamChunkMsg string
 type streamDoneMsg struct{ err error }
+type editorDoneMsg struct {
+	path string
+	err  error
+}
 
 // loadingTickMsg drives the animated gradient on the loading screen.
 type loadingTickMsg struct{}
@@ -58,18 +67,12 @@ type topicOpenedMsg struct {
 	err        error
 }
 
-// ---- Chat data types ----
-
-type chatMessage = core.ChatMessage
-type displayMsg = core.DisplayMessage
-
-// ---- Top-level model ----
-
 type model struct {
 	state appState
 
 	topicInput      textinput.Model
-	chatInput       textinput.Model
+	chatInput       textarea.Model
+	settingsEditor  textinput.Model
 	settingsProfile textarea.Model
 
 	chatRenderer *glamour.TermRenderer
@@ -89,10 +92,11 @@ type model struct {
 	topicList   []string // existing topics under ~/notes/
 	topicCursor int      // -1 = input focused; 0..n-1 = list highlight
 
-	messages    []chatMessage // sent to ollama
-	displayMsgs []displayMsg  // rendered in chat pane
-	pendingAsst string        // assistant text currently being streamed
-	streaming   bool
+	messages           []chatMessage // sent to ollama
+	displayMsgs        []displayMsg  // rendered in chat pane
+	pendingAsst        string        // assistant text currently being streamed
+	streaming          bool
+	composerImagePaths []string
 
 	// While the model is mid-stream of a <<<FILE: name>>> block, writingFile
 	// holds that name so the chat pane can show a "writing X…" spinner
@@ -143,12 +147,14 @@ type model struct {
 	// In-app log viewer (toggled with Ctrl+L). When showLogs is true the View
 	// renders a full-screen scrollable pane showing the contents of logPath
 	// instead of the normal chat layout. State of the chat is preserved.
-	showLogs   bool
-	logView    viewport.Model
+	showLogs      bool
+	logView       viewport.Model
 	showReader    bool
 	readerRawMode bool
+	readerStatus  string
 	// Settings overlay (Ctrl+T). Used for persistent app configuration.
-	showSettings bool
+	showSettings  bool
+	settingsFocus int
 
 	// Right-pane explorer (toggled with Ctrl+E). When true, the right pane
 	// shows a list of files in workDir instead of the markdown preview.
@@ -173,9 +179,26 @@ func initialModel() model {
 	ti.CharLimit = 80
 	ti.Width = 60
 
-	ci := textinput.New()
-	ci.Placeholder = "Message... (Enter to send)"
+	ci := textarea.New()
+	ci.Placeholder = "Message Rune...  Enter to send  •  Ctrl+J newline  •  drag image path to attach"
+	ci.ShowLineNumbers = false
+	ci.Prompt = ""
 	ci.CharLimit = 4000
+	ci.SetHeight(3)
+	ci.SetWidth(60)
+	ci.FocusedStyle.CursorLine = ci.FocusedStyle.CursorLine.UnsetBackground()
+	ci.BlurredStyle.CursorLine = ci.BlurredStyle.CursorLine.UnsetBackground()
+	ci.FocusedStyle.Placeholder = ci.FocusedStyle.Placeholder.Foreground(lipgloss.Color("241"))
+	ci.FocusedStyle.Text = ci.FocusedStyle.Text.Foreground(lipgloss.Color("252"))
+	ci.FocusedStyle.Prompt = ci.FocusedStyle.Prompt.Foreground(lipgloss.Color("252"))
+	ci.BlurredStyle.Text = ci.BlurredStyle.Text.Foreground(lipgloss.Color("252"))
+	ci.BlurredStyle.Prompt = ci.BlurredStyle.Prompt.Foreground(lipgloss.Color("252"))
+	ci.Focus()
+
+	settingsEditor := textinput.New()
+	settingsEditor.Placeholder = "vim, nano, emacs, code --wait..."
+	settingsEditor.CharLimit = 160
+	settingsEditor.Blur()
 
 	settingsProfile := textarea.New()
 	settingsProfile.Placeholder = "Education, experience, goals, learning preferences, recurring context..."
@@ -206,7 +229,8 @@ func initialModel() model {
 	}
 	// Optional: forwarded to the daemon as a Bearer token. Harmless for local.
 	apiKey := os.Getenv("OLLAMA_API_KEY")
-	cfg := loadAppConfig()
+	cfg := core.LoadAppConfig("")
+	settingsEditor.SetValue(cfg.DocumentEditor)
 	settingsProfile.SetValue(cfg.PersonalProfile)
 
 	// Decide which model to start with. Cloud is preferred; we probe it once
@@ -224,7 +248,7 @@ func initialModel() model {
 		}
 	}
 
-	topics := listExistingTopics()
+	topics := core.ListExistingTopics("")
 	cursor := -1
 	if len(topics) > 0 {
 		cursor = 0
@@ -234,6 +258,7 @@ func initialModel() model {
 		state:           stateTopicInput,
 		topicInput:      ti,
 		chatInput:       ci,
+		settingsEditor:  settingsEditor,
 		settingsProfile: settingsProfile,
 		chatView:        chatVP,
 		notesView:       notesVP,
@@ -254,5 +279,5 @@ func initialModel() model {
 }
 
 func (m *model) Init() tea.Cmd {
-	return textinput.Blink
+	return textarea.Blink
 }

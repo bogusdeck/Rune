@@ -1,20 +1,6 @@
 package main
 
-import "notes_maker/pkg/core"
-
-type sessionFile = core.SessionFile
-
-func slugify(topic string) string {
-	return core.Slugify(topic)
-}
-
-func sessionPath(workDir string) string {
-	return core.SessionPath(workDir)
-}
-
-func loadSessionFile(workDir string) (sessionFile, bool) {
-	return core.LoadSessionFile(workDir)
-}
+import "rune/internal/core"
 
 func (m *model) saveSession() {
 	core.SaveSessionFile(m.workDir, sessionFile{
@@ -28,7 +14,7 @@ func (m *model) saveSession() {
 }
 
 func (m *model) loadSession() bool {
-	s, ok := loadSessionFile(m.workDir)
+	s, ok := core.LoadSessionFile(m.workDir)
 	if !ok {
 		return false
 	}
@@ -55,7 +41,7 @@ func (m *model) restoreOptionPicker() {
 			continue
 		}
 		if d.Role == "assistant" {
-			if opts := extractOptions(d.Content); len(opts) >= 2 {
+			if opts := core.ExtractOptions(d.Content); len(opts) >= 2 {
 				m.options = opts
 				m.optionCursor = 0
 				m.optionsActive = true
@@ -63,8 +49,4 @@ func (m *model) restoreOptionPicker() {
 		}
 		break
 	}
-}
-
-func listExistingTopics() []string {
-	return core.ListExistingTopics("")
 }
