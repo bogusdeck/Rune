@@ -107,7 +107,7 @@ OLLAMA_NO_CLOUD=1
 Clone the repository and build from source:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/bogusdeck/Rune
 cd Rune
 go build -o rune .
 ```
@@ -123,7 +123,7 @@ Run the app:
 If someone installs the project on a new laptop, this is the expected workflow:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/bogusdeck/Rune
 cd Rune
 go build -o rune .
 ./rune
