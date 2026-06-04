@@ -8,16 +8,24 @@ import (
 )
 
 type AppConfig struct {
-	PersonalizedMode bool   `json:"personalized_mode"`
-	PersonalProfile  string `json:"personal_profile"`
-	DocumentEditor   string `json:"document_editor"`
+	PersonalizedMode   bool   `json:"personalized_mode"`
+	PersonalProfile    string `json:"personal_profile"`
+	DocumentEditor     string `json:"document_editor"`
+	Provider           string `json:"provider"`
+	CodexCommand       string `json:"codex_command"`
+	CodexModel         string `json:"codex_model"`
+	AntigravityCommand string `json:"antigravity_command"`
 }
 
 func DefaultAppConfig() AppConfig {
 	return AppConfig{
-		PersonalizedMode: false,
-		PersonalProfile:  "",
-		DocumentEditor:   "",
+		PersonalizedMode:   false,
+		PersonalProfile:    "",
+		DocumentEditor:     "",
+		Provider:           "ollama",
+		CodexCommand:       "codex",
+		CodexModel:         "",
+		AntigravityCommand: "antigravity",
 	}
 }
 
@@ -40,6 +48,15 @@ func LoadAppConfig(notesRoot string) AppConfig {
 	}
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		return DefaultAppConfig()
+	}
+	if strings.TrimSpace(cfg.Provider) == "" {
+		cfg.Provider = "ollama"
+	}
+	if strings.TrimSpace(cfg.CodexCommand) == "" {
+		cfg.CodexCommand = "codex"
+	}
+	if strings.TrimSpace(cfg.AntigravityCommand) == "" {
+		cfg.AntigravityCommand = "antigravity"
 	}
 	return cfg
 }

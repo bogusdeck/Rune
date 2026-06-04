@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"rune/internal/core"
@@ -70,10 +71,14 @@ type topicOpenedMsg struct {
 type model struct {
 	state appState
 
-	topicInput      textinput.Model
-	chatInput       textarea.Model
-	settingsEditor  textinput.Model
-	settingsProfile textarea.Model
+	topicInput                 textinput.Model
+	chatInput                  textarea.Model
+	settingsProvider           textinput.Model
+	settingsCodexCommand       textinput.Model
+	settingsCodexModel         textinput.Model
+	settingsAntigravityCommand textinput.Model
+	settingsEditor             textinput.Model
+	settingsProfile            textarea.Model
 
 	chatRenderer *glamour.TermRenderer
 
@@ -92,11 +97,11 @@ type model struct {
 	topicList   []string // existing topics under ~/notes/
 	topicCursor int      // -1 = input focused; 0..n-1 = list highlight
 
-	messages           []chatMessage // sent to ollama
-	displayMsgs        []displayMsg  // rendered in chat pane
-	pendingAsst        string        // assistant text currently being streamed
-	streaming          bool
-	composerImagePaths []string
+	messages                []chatMessage // sent to ollama
+	displayMsgs             []displayMsg  // rendered in chat pane
+	pendingAsst             string        // assistant text currently being streamed
+	streaming               bool
+	composerAttachmentPaths []string
 
 	// While the model is mid-stream of a <<<FILE: name>>> block, writingFile
 	// holds that name so the chat pane can show a "writing X…" spinner
@@ -147,11 +152,13 @@ type model struct {
 	// In-app log viewer (toggled with Ctrl+L). When showLogs is true the View
 	// renders a full-screen scrollable pane showing the contents of logPath
 	// instead of the normal chat layout. State of the chat is preserved.
-	showLogs      bool
-	logView       viewport.Model
-	showReader    bool
-	readerRawMode bool
-	readerStatus  string
+	showLogs          bool
+	logView           viewport.Model
+	showReader        bool
+	readerRawMode     bool
+	readerStatus      string
+	showModelSwitcher bool
+	switcherCursor    int
 	// Settings overlay (Ctrl+T). Used for persistent app configuration.
 	showSettings  bool
 	settingsFocus int
@@ -200,6 +207,26 @@ func initialModel() model {
 	settingsEditor.CharLimit = 160
 	settingsEditor.Blur()
 
+	settingsProvider := textinput.New()
+	settingsProvider.Placeholder = "ollama, codex, antigravity"
+	settingsProvider.CharLimit = 32
+	settingsProvider.Blur()
+
+	settingsCodexCommand := textinput.New()
+	settingsCodexCommand.Placeholder = "codex"
+	settingsCodexCommand.CharLimit = 160
+	settingsCodexCommand.Blur()
+
+	settingsCodexModel := textinput.New()
+	settingsCodexModel.Placeholder = "optional model override"
+	settingsCodexModel.CharLimit = 80
+	settingsCodexModel.Blur()
+
+	settingsAntigravityCommand := textinput.New()
+	settingsAntigravityCommand.Placeholder = "antigravity"
+	settingsAntigravityCommand.CharLimit = 200
+	settingsAntigravityCommand.Blur()
+
 	settingsProfile := textarea.New()
 	settingsProfile.Placeholder = "Education, experience, goals, learning preferences, recurring context..."
 	settingsProfile.CharLimit = 4000
@@ -231,6 +258,10 @@ func initialModel() model {
 	apiKey := os.Getenv("OLLAMA_API_KEY")
 	cfg := core.LoadAppConfig("")
 	settingsEditor.SetValue(cfg.DocumentEditor)
+	settingsProvider.SetValue(normalizeProviderName(cfg.Provider))
+	settingsCodexCommand.SetValue(cfg.CodexCommand)
+	settingsCodexModel.SetValue(cfg.CodexModel)
+	settingsAntigravityCommand.SetValue(cfg.AntigravityCommand)
 	settingsProfile.SetValue(cfg.PersonalProfile)
 
 	// Decide which model to start with. Cloud is preferred; we probe it once
@@ -238,14 +269,18 @@ func initialModel() model {
 	// any error. Set OLLAMA_NO_CLOUD=1 to skip the probe entirely.
 	active := localModel
 	usingCloud := false
-	if os.Getenv("OLLAMA_NO_CLOUD") == "" {
-		if err := probeModel(ollama, cloudModel, apiKey); err == nil {
-			active = cloudModel
-			usingCloud = true
-			fmt.Printf("✓ ollama cloud reachable, using %s\n", cloudModel)
-		} else {
-			fmt.Printf("⚠ cloud unavailable (%v); falling back to local %s\n", err, localModel)
+	if normalizeProviderName(cfg.Provider) == providerOllama {
+		if os.Getenv("OLLAMA_NO_CLOUD") == "" {
+			if err := probeModel(ollama, cloudModel, apiKey); err == nil {
+				active = cloudModel
+				usingCloud = true
+				fmt.Printf("✓ ollama cloud reachable, using %s\n", cloudModel)
+			} else {
+				fmt.Printf("⚠ cloud unavailable (%v); falling back to local %s\n", err, localModel)
+			}
 		}
+	} else {
+		active = "external"
 	}
 
 	topics := core.ListExistingTopics("")
@@ -254,30 +289,62 @@ func initialModel() model {
 		cursor = 0
 	}
 
-	return model{
-		state:           stateTopicInput,
-		topicInput:      ti,
-		chatInput:       ci,
-		settingsEditor:  settingsEditor,
-		settingsProfile: settingsProfile,
-		chatView:        chatVP,
-		notesView:       notesVP,
-		readerView:      readerVP,
-		logView:         logVP,
-		ollamaURL:       ollama,
-		modelName:       active,
-		localModel:      localModel,
-		cloudModel:      cloudModel,
-		usingCloud:      usingCloud,
-		apiKey:          apiKey,
-		config:          cfg,
-		streamCh:        make(chan tea.Msg, 64),
-		topicList:       topics,
-		topicCursor:     cursor,
-		splitPercent:    70,
+	m := model{
+		state:                      stateTopicInput,
+		topicInput:                 ti,
+		chatInput:                  ci,
+		settingsProvider:           settingsProvider,
+		settingsCodexCommand:       settingsCodexCommand,
+		settingsCodexModel:         settingsCodexModel,
+		settingsAntigravityCommand: settingsAntigravityCommand,
+		settingsEditor:             settingsEditor,
+		settingsProfile:            settingsProfile,
+		chatView:                   chatVP,
+		notesView:                  notesVP,
+		readerView:                 readerVP,
+		logView:                    logVP,
+		ollamaURL:                  ollama,
+		modelName:                  active,
+		localModel:                 localModel,
+		cloudModel:                 cloudModel,
+		usingCloud:                 usingCloud,
+		apiKey:                     apiKey,
+		config:                     cfg,
+		streamCh:                   make(chan tea.Msg, 64),
+		topicList:                  topics,
+		topicCursor:                cursor,
+		splitPercent:               70,
 	}
+	m.syncProviderState()
+	return m
 }
 
 func (m *model) Init() tea.Cmd {
 	return textarea.Blink
+}
+
+func (m *model) syncProviderState() {
+	m.config.Provider = normalizeProviderName(m.config.Provider)
+	switch m.providerName() {
+	case providerCodex:
+		m.usingCloud = false
+		if strings.TrimSpace(m.config.CodexModel) != "" {
+			m.modelName = strings.TrimSpace(m.config.CodexModel)
+		} else {
+			m.modelName = "default"
+		}
+	case providerAntigravity:
+		m.usingCloud = false
+		m.modelName = "external"
+	default:
+		active := m.localModel
+		m.usingCloud = false
+		if os.Getenv("OLLAMA_NO_CLOUD") == "" {
+			if err := probeModel(m.ollamaURL, m.cloudModel, m.apiKey); err == nil {
+				active = m.cloudModel
+				m.usingCloud = true
+			}
+		}
+		m.modelName = active
+	}
 }

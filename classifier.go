@@ -1,13 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -40,44 +36,16 @@ type ollamaChatResp struct {
 // request because the result is tiny and we want it fully assembled before
 // branching the UI.
 func (m *model) classifyTopic(topic string) tea.Cmd {
-	url := m.ollamaURL
-	model := m.modelName
-	apiKey := m.apiKey
 	prompt := core.BuildClassifierPrompt(topic)
 
 	return func() tea.Msg {
 		start := time.Now()
-		body, _ := json.Marshal(ollamaReq{
-			Model:    model,
-			Messages: []ollamaMessage{{Role: "user", Content: prompt}},
-			Stream:   false,
-		})
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		req, err := http.NewRequestWithContext(ctx, "POST", url+"/api/chat", bytes.NewReader(body))
-		if err != nil {
-			return classifierDoneMsg{err: err}
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		resp, err := http.DefaultClient.Do(req)
+		raw, err := completeWithProvider(m, prompt, nil)
 		if err != nil {
 			log.Printf("classifier failed: topic=%q elapsed=%s err=%v", topic, time.Since(start), err)
 			return classifierDoneMsg{err: err}
 		}
-		defer resp.Body.Close()
-		raw, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode != 200 {
-			log.Printf("classifier status error: topic=%q elapsed=%s status=%s", topic, time.Since(start), resp.Status)
-			return classifierDoneMsg{err: fmt.Errorf("classifier %s: %s", resp.Status, strings.TrimSpace(string(raw)))}
-		}
-		var chat ollamaChatResp
-		if err := json.Unmarshal(raw, &chat); err != nil {
-			return classifierDoneMsg{err: fmt.Errorf("decode classifier: %w", err)}
-		}
-		res, err := parseClassifierJSON(chat.Message.Content)
+		res, err := parseClassifierJSON(raw)
 		if err != nil {
 			return classifierDoneMsg{err: err}
 		}

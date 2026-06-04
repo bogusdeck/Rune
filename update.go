@@ -19,18 +19,24 @@ import (
 
 func (m *model) sendUserMessage() tea.Cmd {
 	raw := strings.TrimSpace(m.chatInput.Value())
-	if (raw == "" && len(m.composerImagePaths) == 0) || m.streaming {
+	if (raw == "" && len(m.composerAttachmentPaths) == 0) || m.streaming {
 		return nil
 	}
-	cleaned, imagePaths := extractImagePathsAndCleanText(raw)
-	imagePaths = mergeUniqueImagePaths(m.composerImagePaths, imagePaths)
-	text := composeUserMessage(cleaned, imagePaths)
+	cleaned, attachmentPaths := extractAttachmentPathsAndCleanText(raw)
+	attachmentPaths = mergeUniquePaths(m.composerAttachmentPaths, attachmentPaths)
+	imagePaths, _ := splitAttachmentPaths(attachmentPaths)
+	text := composeUserMessage(cleaned, attachmentPaths)
 	if text == "" {
 		return nil
 	}
+	if m.providerName() == providerAuto {
+		routed := m.effectiveProviderName([]chatMessage{{Role: "user", Content: text, ImagePaths: imagePaths, FilePaths: attachmentPaths}})
+		reason := autoRouteReason(text, attachmentPaths, routed)
+		m.displayMsgs = append(m.displayMsgs, displayMsg{Role: "system", Content: fmt.Sprintf("auto routed this turn to %s — %s", routed, reason)})
+	}
 	m.chatInput.SetValue("")
-	m.composerImagePaths = nil
-	m.messages = append(m.messages, chatMessage{Role: "user", Content: text, ImagePaths: imagePaths})
+	m.composerAttachmentPaths = nil
+	m.messages = append(m.messages, chatMessage{Role: "user", Content: text, ImagePaths: imagePaths, FilePaths: attachmentPaths})
 	m.displayMsgs = append(m.displayMsgs, displayMsg{Role: "user", Content: text})
 	m.pendingAsst = ""
 	m.streaming = true
@@ -56,8 +62,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+k" {
+		m.showModelSwitcher = !m.showModelSwitcher
+		return m, nil
+	}
+
 	if m.showSettings {
 		return m.updateSettings(msg)
+	}
+
+	if m.showModelSwitcher {
+		return m.updateModelSwitcher(msg)
 	}
 
 	if m.showReader {
@@ -233,8 +248,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.syncComposerAttachments()
 			}
 		case "backspace":
-			if m.activePane == 0 && strings.TrimSpace(m.chatInput.Value()) == "" && len(m.composerImagePaths) > 0 {
-				m.composerImagePaths = m.composerImagePaths[:len(m.composerImagePaths)-1]
+			if m.activePane == 0 && strings.TrimSpace(m.chatInput.Value()) == "" && len(m.composerAttachmentPaths) > 0 {
+				m.composerAttachmentPaths = m.composerAttachmentPaths[:len(m.composerAttachmentPaths)-1]
 				break
 			}
 			if m.activePane == 0 {
@@ -329,7 +344,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		log.Printf("openTopic topic=%q workDir=%s isNew=%v sessionType=%q preSession=%v", m.topic, m.workDir, isNew, m.sessionType, m.preSession)
 		cmds = append(cmds, m.chatInput.Focus())
 		m.chatInput.SetValue("")
-		m.composerImagePaths = nil
+		m.composerAttachmentPaths = nil
 
 		if isNew {
 			m.loadingMessage = fmt.Sprintf("Reading %q… figuring out the best way to start.", m.topic)
@@ -529,20 +544,37 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) openSettings() {
 	m.showSettings = true
+	m.settingsProvider.SetValue(normalizeProviderName(m.config.Provider))
+	m.settingsCodexCommand.SetValue(m.config.CodexCommand)
+	m.settingsCodexModel.SetValue(m.config.CodexModel)
+	m.settingsAntigravityCommand.SetValue(m.config.AntigravityCommand)
 	m.settingsEditor.SetValue(m.config.DocumentEditor)
 	m.settingsProfile.SetValue(m.config.PersonalProfile)
 	m.settingsFocus = 0
-	m.settingsEditor.Focus()
+	m.settingsProvider.Focus()
+	m.settingsCodexCommand.Blur()
+	m.settingsCodexModel.Blur()
+	m.settingsAntigravityCommand.Blur()
+	m.settingsEditor.Blur()
 	m.settingsProfile.Blur()
 }
 
 func (m *model) closeSettings() {
+	m.config.Provider = normalizeProviderName(m.settingsProvider.Value())
+	m.config.CodexCommand = strings.TrimSpace(m.settingsCodexCommand.Value())
+	m.config.CodexModel = strings.TrimSpace(m.settingsCodexModel.Value())
+	m.config.AntigravityCommand = strings.TrimSpace(m.settingsAntigravityCommand.Value())
 	m.config.DocumentEditor = strings.TrimSpace(m.settingsEditor.Value())
 	m.config.PersonalProfile = strings.TrimSpace(m.settingsProfile.Value())
 	core.SaveAppConfig("", m.config)
+	m.settingsProvider.Blur()
+	m.settingsCodexCommand.Blur()
+	m.settingsCodexModel.Blur()
+	m.settingsAntigravityCommand.Blur()
 	m.settingsEditor.Blur()
 	m.settingsProfile.Blur()
 	m.showSettings = false
+	m.syncProviderState()
 	m.refreshSystemPromptForPersonalization()
 }
 
@@ -559,14 +591,8 @@ func (m *model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.closeSettings()
 			return m, nil
 		case "tab":
-			m.settingsFocus = 1 - m.settingsFocus
-			if m.settingsFocus == 0 {
-				m.settingsProfile.Blur()
-				m.settingsEditor.Focus()
-			} else {
-				m.settingsEditor.Blur()
-				_ = m.settingsProfile.Focus()
-			}
+			m.settingsFocus = (m.settingsFocus + 1) % 6
+			m.focusSettingsField()
 			return m, nil
 		case "ctrl+p":
 			m.config.PersonalizedMode = !m.config.PersonalizedMode
@@ -574,12 +600,86 @@ func (m *model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	if m.settingsFocus == 0 {
+	switch m.settingsFocus {
+	case 0:
+		m.settingsProvider, cmd = m.settingsProvider.Update(msg)
+		return m, cmd
+	case 1:
+		m.settingsCodexCommand, cmd = m.settingsCodexCommand.Update(msg)
+		return m, cmd
+	case 2:
+		m.settingsCodexModel, cmd = m.settingsCodexModel.Update(msg)
+		return m, cmd
+	case 3:
+		m.settingsAntigravityCommand, cmd = m.settingsAntigravityCommand.Update(msg)
+		return m, cmd
+	case 4:
 		m.settingsEditor, cmd = m.settingsEditor.Update(msg)
 		return m, cmd
+	default:
+		m.settingsProfile, cmd = m.settingsProfile.Update(msg)
+		return m, cmd
 	}
-	m.settingsProfile, cmd = m.settingsProfile.Update(msg)
-	return m, cmd
+}
+
+func (m *model) updateModelSwitcher(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.layout()
+	case tea.KeyMsg:
+		presets := m.modelSwitcherPresets()
+		switch msg.String() {
+		case "esc", "ctrl+k":
+			m.showModelSwitcher = false
+			return m, nil
+		case "up", "k":
+			if m.switcherCursor > 0 {
+				m.switcherCursor--
+			}
+			return m, nil
+		case "down", "j":
+			if m.switcherCursor < len(presets)-1 {
+				m.switcherCursor++
+			}
+			return m, nil
+		case "enter":
+			if m.switcherCursor >= 0 && m.switcherCursor < len(presets) {
+				presets[m.switcherCursor].apply(m)
+				core.SaveAppConfig("", m.config)
+				m.displayMsgs = append(m.displayMsgs, displayMsg{Role: "system", Content: fmt.Sprintf("switched provider preset to %s", presets[m.switcherCursor].label)})
+				m.refreshChatView()
+			}
+			m.showModelSwitcher = false
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m *model) focusSettingsField() {
+	m.settingsProvider.Blur()
+	m.settingsCodexCommand.Blur()
+	m.settingsCodexModel.Blur()
+	m.settingsAntigravityCommand.Blur()
+	m.settingsEditor.Blur()
+	m.settingsProfile.Blur()
+
+	switch m.settingsFocus {
+	case 0:
+		m.settingsProvider.Focus()
+	case 1:
+		m.settingsCodexCommand.Focus()
+	case 2:
+		m.settingsCodexModel.Focus()
+	case 3:
+		m.settingsAntigravityCommand.Focus()
+	case 4:
+		m.settingsEditor.Focus()
+	default:
+		_ = m.settingsProfile.Focus()
+	}
 }
 
 func (m *model) openReader() {
@@ -924,7 +1024,7 @@ func (m *model) beginOpenTopic(topic string) tea.Cmd {
 	m.writingFile = ""
 	m.livePreviewSize = 0
 	m.lastFile = ""
-	m.composerImagePaths = nil
+	m.composerAttachmentPaths = nil
 	m.notesView.SetContent("")
 	m.showExplorer = false
 	m.explorerScroll = 0
@@ -1180,7 +1280,10 @@ func (m *model) rewindOnce() bool {
 		return false
 	}
 	stashed := m.messages[lastUser].Content
-	stashedImages := append([]string(nil), m.messages[lastUser].ImagePaths...)
+	stashedFiles := append([]string(nil), m.messages[lastUser].FilePaths...)
+	if len(stashedFiles) == 0 {
+		stashedFiles = append([]string(nil), m.messages[lastUser].ImagePaths...)
+	}
 	m.messages = m.messages[:lastUser]
 
 	// Mirror the truncation in the rendered transcript: drop everything from
@@ -1197,7 +1300,7 @@ func (m *model) rewindOnce() bool {
 	// Restore the popped text into the input so the user can edit and resend.
 	m.chatInput.SetValue(stashed)
 	m.chatInput.CursorEnd()
-	m.composerImagePaths = stashedImages
+	m.composerAttachmentPaths = stashedFiles
 
 	// Clear any transient state tied to the message we just removed.
 	m.options = nil
@@ -1281,16 +1384,16 @@ func (m *model) pickOption(idx int) tea.Cmd {
 	m.optionsActive = false
 	m.options = nil
 	m.chatInput.SetValue(selected)
-	m.composerImagePaths = nil
+	m.composerAttachmentPaths = nil
 	return m.sendUserMessage()
 }
 
 func (m *model) syncComposerAttachments() {
-	cleaned, paths := extractImagePathsAndCleanText(m.chatInput.Value())
+	cleaned, paths := extractAttachmentPathsAndCleanText(m.chatInput.Value())
 	if len(paths) == 0 {
 		return
 	}
-	m.composerImagePaths = mergeUniqueImagePaths(m.composerImagePaths, paths)
+	m.composerAttachmentPaths = mergeUniquePaths(m.composerAttachmentPaths, paths)
 	m.chatInput.SetValue(cleaned)
 	m.chatInput.CursorEnd()
 }
@@ -1337,7 +1440,7 @@ func looksLikeDroppedPathChunk(s string) bool {
 	}
 	lines := strings.Split(s, "\n")
 	for _, line := range lines {
-		if _, ok := parseDroppedImagePath(line); ok {
+		if _, ok := parseDroppedAttachmentPath(line); ok {
 			return true
 		}
 	}

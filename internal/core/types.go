@@ -4,6 +4,7 @@ type ChatMessage struct {
 	Role       string   `json:"role"`
 	Content    string   `json:"content"`
 	ImagePaths []string `json:"image_paths,omitempty"`
+	FilePaths  []string `json:"file_paths,omitempty"`
 }
 
 type DisplayMessage struct {

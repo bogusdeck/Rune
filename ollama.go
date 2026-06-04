@@ -68,65 +68,116 @@ type ollamaStreamResp struct {
 	Done    bool        `json:"done"`
 }
 
+type ollamaProvider struct {
+	url      string
+	model    string
+	apiKey   string
+	workDir  string
+	useCloud bool
+	local    string
+}
+
+func (p ollamaProvider) Name() string { return providerOllama }
+
+func (p ollamaProvider) SupportsImages() bool { return true }
+
+func (p ollamaProvider) Complete(ctx context.Context, prompt string, imagePaths []string) (string, error) {
+	body, _ := json.Marshal(ollamaReq{
+		Model: p.model,
+		Messages: []ollamaMessage{{
+			Role:    "user",
+			Content: prompt,
+			Images:  encodeLocalImages(imagePaths),
+		}},
+		Stream: false,
+	})
+	req, err := http.NewRequestWithContext(ctx, "POST", p.url+"/api/chat", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if p.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("ollama %s: %s", resp.Status, strings.TrimSpace(string(raw)))
+	}
+	var chat ollamaChatResp
+	if err := json.Unmarshal(raw, &chat); err != nil {
+		return "", err
+	}
+	return chat.Message.Content, nil
+}
+
+func (p ollamaProvider) Stream(ctx context.Context, messages []chatMessage, includeReminder bool, ch chan<- tea.Msg) {
+	url := p.url + "/api/chat"
+	modelName := p.model
+	apiKey := p.apiKey
+	msgs := llmMessages(messages)
+	if includeReminder {
+		msgs = append(msgs, ollamaMessage{Role: "system", Content: fileBlockReminderPrompt})
+	}
+	go func() {
+		body, _ := json.Marshal(ollamaReq{Model: modelName, Messages: msgs, Stream: true})
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+		if err != nil {
+			ch <- streamDoneMsg{err: err}
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			ch <- streamDoneMsg{err: err}
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			b, _ := io.ReadAll(resp.Body)
+			ch <- streamDoneMsg{err: fmt.Errorf("ollama %s: %s", resp.Status, strings.TrimSpace(string(b)))}
+			return
+		}
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			var sr ollamaStreamResp
+			if err := json.Unmarshal(line, &sr); err != nil {
+				continue
+			}
+			if sr.Message.Content != "" {
+				ch <- streamChunkMsg(sr.Message.Content)
+			}
+			if sr.Done {
+				break
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			ch <- streamDoneMsg{err: err}
+			return
+		}
+		ch <- streamDoneMsg{err: nil}
+	}()
+}
+
 // startStream launches an HTTP request to Ollama in a background goroutine and
 // pushes streamChunkMsg / streamDoneMsg into m.streamCh. The returned tea.Cmd
 // itself returns nil immediately; the bubble tea loop is fed via waitForStreamMsg.
 func (m *model) startStream() tea.Cmd {
-	url := m.ollamaURL + "/api/chat"
-	modelName := m.modelName
-	apiKey := m.apiKey
-	msgs := llmMessages(m.messages)
-	if !m.preSession {
-		msgs = append(msgs, ollamaMessage{Role: "system", Content: fileBlockReminderPrompt})
-	}
 	ch := m.streamCh
 	return func() tea.Msg {
-		go func() {
-			body, _ := json.Marshal(ollamaReq{Model: modelName, Messages: msgs, Stream: true})
-			req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(body))
-			if err != nil {
-				ch <- streamDoneMsg{err: err}
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
-			if apiKey != "" {
-				req.Header.Set("Authorization", "Bearer "+apiKey)
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				ch <- streamDoneMsg{err: err}
-				return
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				b, _ := io.ReadAll(resp.Body)
-				ch <- streamDoneMsg{err: fmt.Errorf("ollama %s: %s", resp.Status, strings.TrimSpace(string(b)))}
-				return
-			}
-			scanner := bufio.NewScanner(resp.Body)
-			scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-			for scanner.Scan() {
-				line := scanner.Bytes()
-				if len(line) == 0 {
-					continue
-				}
-				var sr ollamaStreamResp
-				if err := json.Unmarshal(line, &sr); err != nil {
-					continue
-				}
-				if sr.Message.Content != "" {
-					ch <- streamChunkMsg(sr.Message.Content)
-				}
-				if sr.Done {
-					break
-				}
-			}
-			if err := scanner.Err(); err != nil {
-				ch <- streamDoneMsg{err: err}
-				return
-			}
-			ch <- streamDoneMsg{err: nil}
-		}()
+		m.currentProvider().Stream(context.Background(), m.messages, !m.preSession, ch)
 		return nil
 	}
 }

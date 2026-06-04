@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestExtractImagePathsAndCleanText(t *testing.T) {
+func TestExtractAttachmentPathsAndCleanText(t *testing.T) {
 	dir := t.TempDir()
 	image := filepath.Join(dir, "diagram.png")
 	if err := os.WriteFile(image, []byte("png"), 0o644); err != nil {
@@ -15,7 +15,7 @@ func TestExtractImagePathsAndCleanText(t *testing.T) {
 	}
 
 	text := "Explain this architecture\n" + image + "\nFocus on data flow"
-	cleaned, paths := extractImagePathsAndCleanText(text)
+	cleaned, paths := extractAttachmentPathsAndCleanText(text)
 	if cleaned != "Explain this architecture\nFocus on data flow" {
 		t.Fatalf("cleaned text = %q", cleaned)
 	}
@@ -32,7 +32,7 @@ func TestParseDroppedImagePathEscapedSpaces(t *testing.T) {
 	}
 
 	escaped := strings.ReplaceAll(image, " ", `\ `)
-	got, ok := parseDroppedImagePath(escaped)
+	got, ok := parseDroppedAttachmentPath(escaped)
 	if !ok || got != image {
 		t.Fatalf("got %q ok=%v want %q", got, ok, image)
 	}
@@ -46,8 +46,21 @@ func TestParseDroppedImagePathFileURI(t *testing.T) {
 	}
 
 	uri := "file://" + strings.ReplaceAll(image, " ", "%20")
-	got, ok := parseDroppedImagePath(uri)
+	got, ok := parseDroppedAttachmentPath(uri)
 	if !ok || got != image {
 		t.Fatalf("got %q ok=%v want %q", got, ok, image)
+	}
+}
+
+func TestParseDroppedAttachmentPathPDF(t *testing.T) {
+	dir := t.TempDir()
+	pdf := filepath.Join(dir, "resume.pdf")
+	if err := os.WriteFile(pdf, []byte("%PDF"), 0o644); err != nil {
+		t.Fatalf("write temp pdf: %v", err)
+	}
+
+	got, ok := parseDroppedAttachmentPath(pdf)
+	if !ok || got != pdf {
+		t.Fatalf("got %q ok=%v want %q", got, ok, pdf)
 	}
 }

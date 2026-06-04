@@ -51,6 +51,10 @@ func (m *model) layoutPanes() {
 
 	m.chatInput.SetWidth(max(20, leftPaneWidth-8))
 	m.chatInput.SetHeight(composerHeight)
+	m.settingsProvider.Width = max(20, m.width-8)
+	m.settingsCodexCommand.Width = max(20, m.width-8)
+	m.settingsCodexModel.Width = max(20, m.width-8)
+	m.settingsAntigravityCommand.Width = max(20, m.width-8)
 	m.settingsEditor.Width = max(20, m.width-8)
 	m.settingsProfile.SetWidth(max(20, m.width-8))
 	m.settingsProfile.SetHeight(max(6, m.height-12))
@@ -237,6 +241,9 @@ func (m *model) View() string {
 	if m.showSettings {
 		return m.viewSettingsScreen()
 	}
+	if m.showModelSwitcher {
+		return m.viewModelSwitcher()
+	}
 	if m.showLogs {
 		return m.viewLogScreen()
 	}
@@ -255,10 +262,7 @@ func (m *model) View() string {
 	paneHeight := m.height - 5
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")).Padding(0, 1)
-	loc := "local"
-	if m.usingCloud {
-		loc = "cloud"
-	}
+	loc := m.providerModeLabel()
 	// Compose a phase tag like " · skill · pre-session" so the user always
 	// knows where they are in the pipeline.
 	phase := ""
@@ -271,8 +275,8 @@ func (m *model) View() string {
 	if m.sessionLabel != "" {
 		phase += " · " + m.sessionLabel
 	}
-	header := headerStyle.Render(fmt.Sprintf("RUNE — %s  (%s)  model: %s [%s]%s",
-		m.topic, m.workDir, m.modelName, loc, phase))
+	header := headerStyle.Render(fmt.Sprintf("RUNE — %s  (%s)  provider: %s  model: %s [%s]%s",
+		m.topic, m.workDir, m.providerDisplay(), m.runtimeLabel(), loc, phase))
 
 	paneStyle := func(active bool) lipgloss.Style {
 		borderColor := lipgloss.Color("62")
@@ -353,7 +357,7 @@ func (m *model) View() string {
 	}
 
 	row1 := " ctrl+c: quit  •  tab: switch pane  •  enter: reader/preview file"
-	row2 := " ctrl+o: home  •  ctrl+e: explorer  •  ctrl+t: settings  •  ctrl+r: rewind  •  ctrl+l: logs" + statusLine
+	row2 := " ctrl+o: home  •  ctrl+e: explorer  •  ctrl+t: settings  •  ctrl+k: switch model  •  ctrl+r: rewind  •  ctrl+l: logs" + statusLine
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	help := lipgloss.JoinVertical(lipgloss.Left,
 		helpStyle.Render(row1),
@@ -364,7 +368,7 @@ func (m *model) View() string {
 }
 
 func (m *model) renderComposerAttachments(width int) string {
-	if len(m.composerImagePaths) == 0 {
+	if len(m.composerAttachmentPaths) == 0 {
 		return ""
 	}
 	label := lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true).Render("attachments")
@@ -374,8 +378,12 @@ func (m *model) renderComposerAttachments(width int) string {
 		Foreground(lipgloss.Color("252")).
 		Padding(0, 1)
 	var chips []string
-	for _, path := range m.composerImagePaths {
-		chips = append(chips, chipStyle.Render("image: "+truncatePlain(filepath.Base(path), max(12, width/3))))
+	for _, path := range m.composerAttachmentPaths {
+		kind := "file"
+		if supportedImageExt[strings.ToLower(filepath.Ext(path))] {
+			kind = "image"
+		}
+		chips = append(chips, chipStyle.Render(kind+": "+truncatePlain(filepath.Base(path), max(12, width/3))))
 	}
 	help := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("backspace on empty input removes last attachment")
 	return lipgloss.JoinVertical(lipgloss.Left, label, lipgloss.JoinHorizontal(lipgloss.Left, chips...), help)
@@ -415,11 +423,6 @@ func (m *model) viewTopicScreen() string {
 	if strings.TrimSpace(m.config.PersonalProfile) != "" {
 		profileState = "saved"
 	}
-	cloudState := "local"
-	if m.usingCloud {
-		cloudState = "cloud"
-	}
-
 	logo := renderRuneLogo(width - 8)
 	tagline := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("254")).Render("Terminal notes for learning and research")
 	subtitle := mutedStyle.Render("Live preview • reusable context • focused topic sessions")
@@ -431,10 +434,11 @@ func (m *model) viewTopicScreen() string {
 		Render(lipgloss.JoinVertical(lipgloss.Left, logo, tagline, subtitle))
 
 	statsLine := lipgloss.JoinHorizontal(lipgloss.Top,
-		homeBadge("Model", truncatePlain(m.modelName, 28), accentA),
-		homeBadge("Mode", cloudState, accentB),
-		homeBadge("Profile", profileState, accentC),
-		homeBadge("Topics", fmt.Sprintf("%d", len(m.topicList)), lipgloss.Color("111")),
+		homeBadge("Provider", m.providerDisplay(), accentA),
+		homeBadge("Model", truncatePlain(m.runtimeLabel(), 28), accentB),
+		homeBadge("Mode", m.providerModeLabel(), accentC),
+		homeBadge("Profile", profileState, lipgloss.Color("111")),
+		homeBadge("Topics", fmt.Sprintf("%d", len(m.topicList)), lipgloss.Color("75")),
 	)
 
 	var recent strings.Builder
@@ -581,6 +585,22 @@ func (m *model) viewSettingsScreen() string {
 		fmt.Sprintf("%s %s", labelStyle.Render("Personalized mode:"), mode),
 		helpStyle.Render("tab: switch field  •  ctrl+p: toggle  •  esc/ctrl+t: save and close"),
 		"",
+		labelStyle.Render("Provider"),
+		helpStyle.Render("Choose backend: ollama, codex, or antigravity."),
+		m.settingsProvider.View(),
+		"",
+		labelStyle.Render("Codex command"),
+		helpStyle.Render("CLI used for Codex backend, typically just: codex"),
+		m.settingsCodexCommand.View(),
+		"",
+		labelStyle.Render("Codex model"),
+		helpStyle.Render("Optional. Leave empty to use Codex default model."),
+		m.settingsCodexModel.View(),
+		"",
+		labelStyle.Render("Antigravity command"),
+		helpStyle.Render("Shell command Rune should run for Antigravity backend."),
+		m.settingsAntigravityCommand.View(),
+		"",
 		labelStyle.Render("Document editor"),
 		helpStyle.Render("Used by reader edit mode. Examples: vim, nano, emacs, code --wait."),
 		m.settingsEditor.View(),
@@ -588,6 +608,11 @@ func (m *model) viewSettingsScreen() string {
 		labelStyle.Render("User keypoints"),
 		helpStyle.Render("Keep stable facts here: education, experience, goals, preferences, recurring context."),
 	)
+
+	boxWidth := max(40, m.width-6)
+	boxHeight := max(12, m.height-4)
+	profileHeight := max(6, min(12, boxHeight-26))
+	m.settingsProfile.SetHeight(profileHeight)
 
 	body := lipgloss.JoinVertical(lipgloss.Left,
 		header,
@@ -598,9 +623,41 @@ func (m *model) viewSettingsScreen() string {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("57")).
 		Padding(1, 2).
-		Width(max(40, m.width-4)).
-		Height(max(10, m.height-4)).
+		Width(boxWidth).
+		Height(boxHeight).
 		Render(body)
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func (m *model) viewModelSwitcher() string {
+	if m.width <= 0 || m.height <= 0 {
+		return "model switcher"
+	}
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213"))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("57"))
+
+	var lines []string
+	lines = append(lines, titleStyle.Render("MODEL SWITCHER"))
+	lines = append(lines, metaStyle.Render("ctrl+k/esc: close  •  ↑↓: select  •  enter: apply"))
+	lines = append(lines, "")
+	for i, preset := range m.modelSwitcherPresets() {
+		line := fmt.Sprintf("%s — %s", preset.label, preset.description)
+		if i == m.switcherCursor {
+			lines = append(lines, selectedStyle.Render("› "+line))
+		} else {
+			lines = append(lines, labelStyle.Render("  "+line))
+		}
+	}
+
+	box := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("57")).
+		Padding(1, 2).
+		Width(min(72, max(44, m.width-10))).
+		Render(strings.Join(lines, "\n"))
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
