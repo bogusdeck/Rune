@@ -5,6 +5,7 @@ rune
 notes-maker
 dist/
 build/
+node_modules/
 
 # Local app state
 *.log

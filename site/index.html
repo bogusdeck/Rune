@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Rune is a terminal-first note-making app for guided learning, research, live markdown notes, attachments, and model routing."
+    />
+    <title>Rune - Terminal notes for learning and research</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <a class="hero-github-card" href="https://github.com/bogusdeck/Rune" aria-label="Open Rune on GitHub">
+          <img src="/assets/github.png" alt="" />
+          <span>Star Rune</span>
+        </a>
+        <div class="terminal-backdrop" aria-hidden="true">
+          <div class="terminal-window terminal-window-main">
+            <div class="terminal-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+              <strong>rune</strong>
+            </div>
+            <pre>██████╗ ██╗   ██╗███╗   ██╗███████╗
+██╔══██╗██║   ██║████╗  ██║██╔════╝
+██████╔╝██║   ██║██╔██╗ ██║█████╗
+██╔══██╗██║   ██║██║╚██╗██║██╔══╝
+██║  ██║╚██████╔╝██║ ╚████║███████╗
+╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝</pre>
+            <div class="terminal-grid">
+              <div>
+                <span class="term-label">[1] Chat</span>
+                <p><b>you</b> Build a one week Go roadmap from my resume.</p>
+                <p><b>ai</b> I will create a focused path and write notes as files.</p>
+                <p class="term-file">&lt;&lt;&lt;FILE: 01-go-roadmap.md&gt;&gt;&gt;</p>
+              </div>
+              <div>
+                <span class="term-label">[2] Notes Preview</span>
+                <p># Go Roadmap</p>
+                <p>- Day 1: syntax and structure</p>
+                <p>- Day 2: functions and errors</p>
+                <p>- Day 3: HTTP services</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-content">
+          <p class="eyebrow">Terminal-first learning workspace</p>
+          <h1 id="hero-title">Rune turns chats into live markdown notes.</h1>
+          <p class="hero-copy">
+            Start with a topic, attach documents, route the request to the right model, and watch
+            structured notes appear in your terminal as real files.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#install">Install Rune</a>
+            <a class="button secondary" href="#showcase">Watch demo slots</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="capability-console" aria-label="Rune capabilities">
+        <div class="capability-intro">
+          <span>rune://workspace</span>
+          <strong>Everything needed for focused terminal learning.</strong>
+        </div>
+        <div class="capability-grid">
+          <article tabindex="0">
+            <div class="capability-card-face capability-card-front">
+              <span>01</span>
+              <strong>Guided sessions</strong>
+            </div>
+            <div class="capability-card-face capability-card-back">
+              <p>Start a topic and Rune keeps the learning path focused, resumable, and organized.</p>
+            </div>
+          </article>
+          <article tabindex="0">
+            <div class="capability-card-face capability-card-front">
+              <span>02</span>
+              <strong>Live markdown preview</strong>
+            </div>
+            <div class="capability-card-face capability-card-back">
+              <p>Watch generated notes appear as readable markdown while the assistant writes files.</p>
+            </div>
+          </article>
+          <article tabindex="0">
+            <div class="capability-card-face capability-card-front">
+              <span>03</span>
+              <strong>PDF and document context</strong>
+            </div>
+            <div class="capability-card-face capability-card-back">
+              <p>Attach resumes, PDFs, notes, and docs so the model answers with your real context.</p>
+            </div>
+          </article>
+          <article tabindex="0">
+            <div class="capability-card-face capability-card-front">
+              <span>04</span>
+              <strong>Auto model routing</strong>
+            </div>
+            <div class="capability-card-face capability-card-back">
+              <p>Use Ollama for simple work and route harder or attachment-heavy tasks to stronger providers.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section split-section" id="workflow">
+        <div class="section-heading">
+          <p class="eyebrow">Workflow</p>
+          <h2>From blank topic to organized notes.</h2>
+        </div>
+        <div class="steps">
+          <article>
+            <span>01</span>
+            <h3>Choose a topic</h3>
+            <p>Rune classifies the session as learning or research and starts with the right questions.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Add context</h3>
+            <p>Drop images, PDFs, resumes, docs, and notes into the composer before sending.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Route intelligently</h3>
+            <p>Use Ollama for simple work, Codex for harder or image-heavy turns, and Antigravity when configured.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <h3>Keep the files</h3>
+            <p>Generated notes land in your local notes directory and stay resumable by topic.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section feature-band" id="features">
+        <div class="section-heading">
+          <p class="eyebrow">Features</p>
+          <h2>Built for people who actually live in terminals.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <h3>Split-pane TUI</h3>
+            <p>Chat on the left, rendered notes on the right, with a file explorer when you need it.</p>
+          </article>
+          <article>
+            <h3>Document-aware composer</h3>
+            <p>Attach resumes, PDFs, markdown files, CSVs, images, and docs as context for the next turn.</p>
+          </article>
+          <article>
+            <h3>Auto provider mode</h3>
+            <p>Route easy text to Ollama, complex work to Codex, and medium tasks to Antigravity when available.</p>
+          </article>
+          <article>
+            <h3>Resumable topics</h3>
+            <p>Every topic keeps its own chat history, generated files, and session metadata.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section install" id="install">
+        <div>
+          <p class="eyebrow">Install</p>
+          <h2>Build from source in seconds.</h2>
+          <p>
+            Rune is a Go app. Clone the repository, build the binary, and start a topic from your terminal.
+          </p>
+        </div>
+        <div class="command-panel" aria-label="Install commands">
+          <pre><code>git clone https://github.com/bogusdeck/Rune
+cd Rune
+go build -o rune .
+./rune</code></pre>
+        </div>
+      </section>
+
+      <section class="section showcase" id="showcase">
+        <div class="section-heading">
+          <p class="eyebrow">Showcase</p>
+          <h2>Add your product videos here.</h2>
+          <p>Use these slots for a full walkthrough, attachment demo, provider switching, and live preview clips.</p>
+        </div>
+        <div class="video-grid">
+          <article aria-label="Full walkthrough video placeholder">
+            <span>Full walkthrough</span>
+            <strong>01</strong>
+          </article>
+          <article aria-label="Attachment workflow video placeholder">
+            <span>Attachment workflow</span>
+            <strong>02</strong>
+          </article>
+          <article aria-label="Auto routing video placeholder">
+            <span>Auto routing</span>
+            <strong>03</strong>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer" aria-label="Rune footer">
+      <div class="footer-logo" aria-label="Rune">
+        <pre>██████╗ ██╗   ██╗███╗   ██╗███████╗
+██╔══██╗██║   ██║████╗  ██║██╔════╝
+██████╔╝██║   ██║██╔██╗ ██║█████╗
+██╔══██╗██║   ██║██║╚██╗██║██╔══╝
+██║  ██║╚██████╔╝██║ ╚████║███████╗
+╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝</pre>
+      </div>
+      <div class="footer-meta">
+        <span>Terminal-first learning workspace</span>
+        <a class="github-link" href="https://github.com/bogusdeck/Rune" aria-label="Open Rune on GitHub">
+          <img src="/assets/github.png" alt="" />
+          <span>GitHub</span>
+        </a>
+      </div>
+    </footer>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
+      defer
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"
+      defer
+    ></script>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
