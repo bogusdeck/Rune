@@ -54,32 +54,33 @@ Rune is built for users who prefer learning, researching, and writing without le
 
 ## Demo Videos
 
-Use this section to showcase how Rune works in practice with recordings, GIFs, or short feature clips.
+Watch Rune in action to see how it structures your learning sessions directly inside the terminal.
 
 ### Full Walkthrough
 
-Replace this placeholder with your main demo video:
+A complete walkthrough showing topic classification, live notes generation, and TUI pane switching.
 
-```md
-[![Watch the full demo](assets/demo-cover.png)](https://your-video-link-here)
-```
+<video src="site/public/assets/full_tutorial.mov" width="100%" controls></video>
+
+---
 
 ### Feature Clips
 
-You can add smaller demos for individual features here:
+#### 1. Model & Provider Switching (Ollama Fallback)
+Demonstrating how Rune routes prompts and switches models/providers seamlessly.
 
-- Topic classification
-- Live notes preview
-- Resume previous session
-- File explorer and settings
-- Ollama model fallback
+<video src="site/public/assets/model%20switching.mp4" width="100%" controls></video>
 
-Example format:
+#### 2. Resuming Previous Sessions
+Demonstrating how topic session history and previous chats are reloaded on startup.
 
-```md
-#### Live Preview Demo
-[Watch video](https://your-video-link-here)
-```
+<video src="site/public/assets/previous%20chat%20loading.mp4" width="100%" controls></video>
+
+#### Missing / Required Demos:
+To complete the demo section, the following feature recordings are still needed:
+- **Topic Classification**: Showing how a user enters a topic (e.g., Go, linear algebra) and Rune classifies it as a learning or research session.
+- **Live Notes Preview**: Zooming in on the split-pane rendering as files are created and updated live.
+- **File Explorer & Settings**: Demonstrating `Ctrl+E` to toggle the file tree and `Ctrl+T` to adjust preferences.
 
 ## Requirements
 
