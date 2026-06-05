@@ -60,7 +60,7 @@ Watch Rune in action to see how it structures your learning sessions directly in
 
 A complete walkthrough showing topic classification, live notes generation, and TUI pane switching.
 
-![Full Walkthrough](site/public/assets/full_tutorial.mp4)
+https://github.com/user-attachments/assets/691babf7-2214-4681-be6c-f184bace543c
 
 ---
 
