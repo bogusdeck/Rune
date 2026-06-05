@@ -43,12 +43,6 @@ func (m *model) layoutPanes() {
 	paneHeight := m.height - 5
 	composerHeight := m.chatComposerHeight()
 
-	m.chatView.Width = leftPaneWidth - 2
-	m.chatView.Height = max(6, paneHeight-composerHeight-4)
-
-	m.notesView.Width = rightPaneWidth - 2
-	m.notesView.Height = paneHeight - 2
-
 	m.chatInput.SetWidth(max(20, leftPaneWidth-8))
 	m.chatInput.SetHeight(composerHeight)
 	m.settingsProvider.Width = max(20, m.width-8)
@@ -58,6 +52,23 @@ func (m *model) layoutPanes() {
 	m.settingsEditor.Width = max(20, m.width-8)
 	m.settingsProfile.SetWidth(max(20, m.width-8))
 	m.settingsProfile.SetHeight(max(6, m.height-12))
+
+	m.chatView.Width = leftPaneWidth - 2
+	m.notesView.Width = rightPaneWidth - 2
+
+	inputBoxHeight := lipgloss.Height(lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("99")).
+		Padding(0, 1).
+		Render(m.chatInput.View()))
+	attachmentsHeight := 0
+	if attachments := m.renderComposerAttachments(leftPaneWidth - 2); attachments != "" {
+		attachmentsHeight = lipgloss.Height(attachments)
+	}
+
+	leftChromeHeight := 1 + inputBoxHeight + attachmentsHeight + 1
+	m.chatView.Height = max(6, paneHeight-2-leftChromeHeight)
+	m.notesView.Height = paneHeight - 2
 }
 
 func (m *model) chatComposerHeight() int {
@@ -300,11 +311,13 @@ func (m *model) View() string {
 			Width(rightPaneWidth).
 			Height(paneHeight)
 	}
-	activeLabel := func(label string, active bool) string {
-		if !active {
-			return label
+	activeLabel := func(label string, active bool, width int) string {
+		text := truncatePlain(label, max(8, width))
+		style := lipgloss.NewStyle().Width(width).MaxWidth(width)
+		if active {
+			style = style.Bold(true).Foreground(lipgloss.Color("213"))
 		}
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213")).Render(label)
+		return style.Render(text)
 	}
 
 	sep := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Repeat("─", leftPaneWidth-2))
@@ -345,8 +358,8 @@ func (m *model) View() string {
 	rightPane := rightPaneStyle(m.activePane == 1).Render(rightInner)
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat ", m.activePane == 0), leftPane),
-		lipgloss.JoinVertical(lipgloss.Left, activeLabel(rightLabel, m.activePane == 1), rightPane),
+		lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat ", m.activePane == 0, leftPaneWidth), leftPane),
+		lipgloss.JoinVertical(lipgloss.Left, activeLabel(rightLabel, m.activePane == 1, rightPaneWidth), rightPane),
 	)
 
 	statusLine := ""
