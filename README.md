@@ -60,9 +60,7 @@ Watch Rune in action to see how it structures your learning sessions directly in
 
 A complete walkthrough showing topic classification, live notes generation, and TUI pane switching.
 
-
-
-
+![Full Walkthrough](site/public/assets/full_tutorial.mp4)
 
 ---
 
@@ -71,14 +69,12 @@ A complete walkthrough showing topic classification, live notes generation, and 
 #### 1. Model & Provider Switching (Ollama Fallback)
 Demonstrating how Rune routes prompts and switches models/providers seamlessly.
 
-<video src="site/public/assets/model%20switching.mp4" width="100%" controls></video>
-
-https://github.com/user-attachments/assets/3a1ad659-8b01-45d2-96e0-4581787b324e
+![Model & Provider Switching](site/public/assets/model_switching.gif)
 
 #### 2. Resuming Previous Sessions
 Demonstrating how topic session history and previous chats are reloaded on startup.
 
-<video src="site/public/assets/previous%20chat%20loading.mp4" width="100%" controls></video>
+![Resuming Previous Sessions](site/public/assets/previous_chat_loading.gif)
 
 #### Missing / Required Demos:
 To complete the demo section, the following feature recordings are still needed:
