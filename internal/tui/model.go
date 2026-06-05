@@ -1,4 +1,4 @@
-package main
+package tui
 
 import (
 	"fmt"
@@ -347,4 +347,16 @@ func (m *model) syncProviderState() {
 		}
 		m.modelName = active
 	}
+}
+
+
+// LogPath holds the path to the application log file.
+var LogPath string
+
+// Run starts the Bubble Tea program.
+func Run(logPath string) error {
+	LogPath = logPath
+	m := initialModel()
+	_, err := tea.NewProgram(&m, tea.WithAltScreen(), tea.WithMouseAllMotion()).Run()
+	return err
 }

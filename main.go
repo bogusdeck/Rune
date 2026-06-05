@@ -7,17 +7,14 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"rune/internal/tui"
 )
-
-// logPath is where every log.Printf in the app lands. We keep it as a package
-// global so the in-app log viewer (Ctrl+L) can read the same file.
-var logPath string
 
 func main() {
 	home, _ := os.UserHomeDir()
 	logDir := filepath.Join(home, "notes")
 	_ = os.MkdirAll(logDir, 0o755)
-	logPath = filepath.Join(logDir, ".rune.log")
+	logPath := filepath.Join(logDir, ".rune.log")
 
 	if f, err := tea.LogToFile(logPath, ""); err == nil {
 		defer f.Close()
@@ -27,8 +24,7 @@ func main() {
 	}
 	fmt.Printf("logs: %s  (press ctrl+l in-app, or `tail -f %s`)\n", logPath, logPath)
 
-	m := initialModel()
-	if _, err := tea.NewProgram(&m, tea.WithAltScreen(), tea.WithMouseAllMotion()).Run(); err != nil {
+	if err := tui.Run(logPath); err != nil {
 		fmt.Printf("Error: %v", err)
 		os.Exit(1)
 	}

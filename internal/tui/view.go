@@ -1,4 +1,4 @@
-package main
+package tui
 
 import (
 	"fmt"
@@ -768,7 +768,7 @@ func loadingSpinner(frame int) string {
 // of debug output and keeps the viewport snappy.
 const logTailBytes = 256 * 1024
 
-// refreshLogView reads the tail of logPath into the log viewport. Called when
+// refreshLogView reads the tail of LogPath into the log viewport. Called when
 // the user toggles the overlay on or presses 'r' to refresh.
 func (m *model) refreshLogView() {
 	w := m.width
@@ -783,7 +783,7 @@ func (m *model) refreshLogView() {
 	m.logView.Width = w - 4
 	m.logView.Height = h - 6
 
-	content := readLogTail(logPath, logTailBytes)
+	content := readLogTail(LogPath, logTailBytes)
 	if content == "" {
 		content = "(no log output yet — actions you take in the app will appear here)"
 	}
@@ -1137,7 +1137,7 @@ func (m *model) viewLogScreen() string {
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 
 	title := titleStyle.Render("LOGS")
-	path := pathStyle.Render(logPath)
+	path := pathStyle.Render(LogPath)
 	help := helpStyle.Render(
 		"ctrl+l/esc/q: close  •  pgup/pgdn (j/k): scroll  •  g/G: top/bottom  •  r: refresh")
 

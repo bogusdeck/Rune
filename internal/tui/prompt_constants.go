@@ -1,4 +1,4 @@
-package main
+package tui
 
 const fileBlockReminderPrompt = `Host integration reminder:
 - If the user asks you to create, save, write, or update notes/files, you MUST emit the full raw file block:

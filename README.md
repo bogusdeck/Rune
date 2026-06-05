@@ -145,14 +145,10 @@ go build -o rune .
 
 ```text
 .
-├── internal/core/   # private helper logic: prompts, parser, config, sessions
+├── internal/
+│   ├── core/        # private helper logic: prompts, parser, config, sessions
+│   └── tui/         # TUI logic: model, views, updates, watcher, client, classifier
 ├── main.go          # app entrypoint
-├── model.go         # Bubble Tea model and app state
-├── update.go        # event handling and session orchestration
-├── view.go          # UI rendering
-├── ollama.go        # Ollama client and streaming logic
-├── classifier.go    # topic classification
-├── watcher.go       # markdown file watcher
 └── README.md
 ```
 
