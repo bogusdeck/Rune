@@ -349,7 +349,6 @@ func (m *model) syncProviderState() {
 	}
 }
 
-
 // LogPath holds the path to the application log file.
 var LogPath string
 
