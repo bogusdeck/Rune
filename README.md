@@ -60,7 +60,9 @@ Watch Rune in action to see how it structures your learning sessions directly in
 
 A complete walkthrough showing topic classification, live notes generation, and TUI pane switching.
 
-<video src="site/public/assets/full_tutorial.mov" width="100%" controls></video>
+
+
+
 
 ---
 
@@ -70,6 +72,8 @@ A complete walkthrough showing topic classification, live notes generation, and 
 Demonstrating how Rune routes prompts and switches models/providers seamlessly.
 
 <video src="site/public/assets/model%20switching.mp4" width="100%" controls></video>
+
+https://github.com/user-attachments/assets/3a1ad659-8b01-45d2-96e0-4581787b324e
 
 #### 2. Resuming Previous Sessions
 Demonstrating how topic session history and previous chats are reloaded on startup.
