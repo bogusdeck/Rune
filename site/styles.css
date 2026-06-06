@@ -331,10 +331,10 @@ h1 {
 
 .hero-subtitle {
   margin: 0 0 20px;
-  font-size: clamp(28px, 4vw, 52px);
-  line-height: 1.15;
+  font-size: clamp(42px, 6vw, 72px);
+  line-height: 1.08;
   color: var(--soft);
-  font-weight: 600;
+  font-weight: 700;
   max-width: 560px;
 }
 
