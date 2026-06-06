@@ -15,8 +15,102 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
+    <style>
+      /* Preloader and FOUC styles */
+      body {
+        margin: 0;
+        background: #05070b;
+        color: #e2e8f0;
+      }
+      
+      #preloader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #05070b;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        font-family: 'JetBrains Mono', monospace;
+        transition: opacity 0.4s ease, visibility 0.4s ease;
+      }
+      
+      .preloader-terminal {
+        width: 260px;
+        background: #090d14;
+        border: 1px solid rgba(155, 228, 223, 0.2);
+        padding: 16px 20px;
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.6);
+        border-radius: 6px;
+      }
+      
+      .preloader-bar {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      
+      .preloader-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      
+      .preloader-dot:nth-child(1) { background: #ff5f56; }
+      .preloader-dot:nth-child(2) { background: #ffbd2e; }
+      .preloader-dot:nth-child(3) { background: #27c93f; }
+      
+      .preloader-text {
+        font-size: 13px;
+        color: #9be4df;
+        white-space: nowrap;
+        overflow: hidden;
+        border-right: 2px solid #9be4df;
+        width: 0;
+        animation: preloader-typing 1.6s steps(18) infinite alternate, preloader-blink 0.75s step-end infinite;
+      }
+      
+      @keyframes preloader-typing {
+        from { width: 0 }
+        to { width: 154px } /* Width matching "rune --loading..." */
+      }
+      
+      @keyframes preloader-blink {
+        from, to { border-color: transparent }
+        50% { border-color: #9be4df }
+      }
+      
+      main, footer {
+        opacity: 0;
+        transition: opacity 0.5s ease;
+      }
+      
+      body.loaded main, body.loaded footer {
+        opacity: 1;
+      }
+    </style>
+    <noscript>
+      <style>
+        #preloader { display: none !important; }
+        main, footer { opacity: 1 !important; }
+      </style>
+    </noscript>
   </head>
   <body>
+    <div id="preloader" role="status" aria-label="Loading page">
+      <div class="preloader-terminal">
+        <div class="preloader-bar">
+          <div class="preloader-dot"></div>
+          <div class="preloader-dot"></div>
+          <div class="preloader-dot"></div>
+        </div>
+        <div class="preloader-text">rune --loading...</div>
+      </div>
+    </div>
     <main>
       <section class="hero" aria-labelledby="hero-title">
         <a class="hero-github-card" href="https://github.com/bogusdeck/Rune" aria-label="Open Rune on GitHub">
@@ -319,5 +413,18 @@ go build -o rune .
       defer
     ></script>
     <script type="module" src="/main.js"></script>
+    <script>
+      window.addEventListener("load", function() {
+        const preloader = document.getElementById("preloader");
+        if (preloader) {
+          preloader.style.opacity = "0";
+          preloader.style.visibility = "hidden";
+          setTimeout(function() {
+            preloader.remove();
+          }, 400);
+        }
+        document.body.classList.add("loaded");
+      });
+    </script>
   </body>
 </html>
