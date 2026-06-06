@@ -1237,7 +1237,14 @@ h1 {
   width: min-content;
   max-width: 100%;
   margin: 0 auto;
+  transform: translateX(-40px);
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .footer-logo {
+    transform: translateX(0);
+  }
 }
 
 .footer-logo-img {
