@@ -51,14 +51,15 @@ a {
   --cursor-y: 26%;
   --dither-x: 0px;
   --dither-y: 0px;
-  min-height: 100vh;
-  min-height: 100svh;
+  height: 100vh;
+  height: 100svh;
   display: flex;
   align-items: center;
   gap: clamp(32px, 5vw, 72px);
-  padding: 72px clamp(18px, 5vw, 72px) 72px;
-  overflow: clip;
+  padding: 72px clamp(18px, 5vw, 72px);
+  overflow: hidden;
   border-bottom: 1px solid rgba(154, 169, 255, 0.18);
+  box-sizing: border-box;
 }
 
 .hero::before {
@@ -150,6 +151,9 @@ a {
   position: relative;
   flex: 1 1 55%;
   min-width: 0;
+  max-height: calc(100svh - 144px);
+  align-self: center;
+  overflow: hidden;
   opacity: 0.9;
   z-index: 2;
 }
@@ -166,7 +170,7 @@ a {
 }
 
 .terminal-window-main {
-  max-height: calc(100svh - 144px);
+  height: 100%;
   transform: perspective(1200px) rotateX(3deg) rotateY(-5deg);
   transform-origin: right center;
   overflow: hidden;
