@@ -1,6 +1,6 @@
 document.documentElement.classList.add("js");
 
-window.addEventListener("load", () => {
+document.addEventListener("DOMContentLoaded", () => {
   const { gsap } = window;
 
   if (!gsap || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -163,5 +163,12 @@ window.addEventListener("load", () => {
         });
       }
     });
+  }
+});
+
+// Refresh ScrollTrigger calculations after everything (videos, images) fully loads
+window.addEventListener("load", () => {
+  if (window.ScrollTrigger) {
+    window.ScrollTrigger.refresh();
   }
 });
