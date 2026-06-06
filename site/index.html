@@ -149,21 +149,76 @@
           <h2>Built for people who actually live in terminals.</h2>
         </div>
         <div class="feature-grid">
-          <article>
+          <article class="feature-card">
+            <div class="feature-media">
+              <div class="tui-mock">
+                <div class="tui-pane tui-pane-left">
+                  <div class="tui-terminal-bar">chat.go</div>
+                  <div class="tui-terminal-body">
+                    <span class="tui-prompt">you://</span><span class="tui-typing">build a parser...</span>
+                  </div>
+                </div>
+                <div class="tui-pane tui-pane-right">
+                  <div class="tui-terminal-bar">parser.md</div>
+                  <div class="tui-terminal-body">
+                    <div class="tui-md-header"># Parser</div>
+                    <div class="tui-md-line"></div>
+                    <div class="tui-md-line"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <h3>Split-pane TUI</h3>
             <p>Chat on the left, rendered notes on the right, with a file explorer when you need it.</p>
+            <div class="feature-footer">tui://layout-split</div>
           </article>
-          <article>
+
+          <article class="feature-card">
+            <div class="feature-media">
+              <div class="composer-mock">
+                <div class="composer-input">
+                  <div class="composer-cursor"></div>
+                </div>
+                <div class="composer-attachments">
+                  <div class="composer-file-badge pdf-badge">📄 resume.pdf</div>
+                  <div class="composer-file-badge csv-badge">📊 metrics.csv</div>
+                </div>
+              </div>
+            </div>
             <h3>Document-aware composer</h3>
             <p>Attach resumes, PDFs, markdown files, CSVs, images, and docs as context for the next turn.</p>
+            <div class="feature-footer">context://composer-attach</div>
           </article>
-          <article>
+
+          <article class="feature-card">
+            <div class="feature-media">
+              <img src="/assets/model_switching.gif" alt="Auto provider mode" class="feature-gif" />
+              <div class="provider-mock">
+                <div class="provider-nodes">
+                  <span class="provider-node">Ollama</span>
+                  <span class="provider-arrow">→</span>
+                  <span class="provider-node ant-node">Antigravity</span>
+                </div>
+              </div>
+            </div>
             <h3>Auto provider mode</h3>
             <p>Route easy text to Ollama, complex work to Codex, and medium tasks to Antigravity when available.</p>
+            <div class="feature-footer">routing://model-fallback</div>
           </article>
-          <article>
+
+          <article class="feature-card">
+            <div class="feature-media">
+              <img src="/assets/previous_chat_loading.gif" alt="Resumable topics" class="feature-gif" />
+              <div class="session-mock">
+                <div class="session-history">
+                  <div class="session-item">history_turn_1.json</div>
+                  <div class="session-item">history_turn_2.json</div>
+                </div>
+              </div>
+            </div>
             <h3>Resumable topics</h3>
             <p>Every topic keeps its own chat history, generated files, and session metadata.</p>
+            <div class="feature-footer">session://persistent-state</div>
           </article>
         </div>
       </section>
