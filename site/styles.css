@@ -252,7 +252,8 @@ a {
 .hero-content {
   position: relative;
   z-index: 3;
-  max-width: 760px;
+  max-width: 1040px;
+  width: 100%;
 }
 
 .eyebrow {
@@ -278,9 +279,17 @@ h1 {
   line-height: 0.91;
 }
 
+.hero-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 40px;
+  margin-top: 26px;
+}
+
 .hero-copy {
-  max-width: 670px;
-  margin: 26px 0 0;
+  max-width: 520px;
+  margin: 0;
   color: var(--soft);
   font-size: clamp(17px, 2vw, 22px);
   line-height: 1.55;
@@ -288,9 +297,25 @@ h1 {
 
 .hero-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 14px;
-  margin-top: 34px;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .hero-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 24px;
+    margin-top: 20px;
+  }
+  .hero-copy {
+    max-width: 100%;
+  }
+  .hero-actions {
+    width: 100%;
+  }
 }
 
 .button {
@@ -1420,7 +1445,6 @@ h1 {
 
   .hero-actions {
     gap: 10px;
-    margin-top: 26px;
   }
 
   .button {
