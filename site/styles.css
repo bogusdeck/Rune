@@ -519,7 +519,7 @@ h1 {
 .feature-grid article {
   display: flex;
   flex-direction: column;
-  min-height: 420px;
+  min-height: 360px;
   border-radius: 8px;
 }
 
