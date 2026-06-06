@@ -8,6 +8,7 @@ import (
 
 	"rune/internal/core"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -193,6 +194,8 @@ func initialModel() model {
 	ci.CharLimit = 4000
 	ci.SetHeight(3)
 	ci.SetWidth(60)
+	ci.KeyMap.DeleteBeforeCursor = key.NewBinding(key.WithKeys("ctrl+backspace", "ctrl+u"))
+	ci.KeyMap.DeleteWordBackward = key.NewBinding(key.WithKeys("alt+backspace", "ctrl+w"))
 	ci.FocusedStyle.CursorLine = ci.FocusedStyle.CursorLine.UnsetBackground()
 	ci.BlurredStyle.CursorLine = ci.BlurredStyle.CursorLine.UnsetBackground()
 	ci.FocusedStyle.Placeholder = ci.FocusedStyle.Placeholder.Foreground(lipgloss.Color("241"))
@@ -356,6 +359,6 @@ var LogPath string
 func Run(logPath string) error {
 	LogPath = logPath
 	m := initialModel()
-	_, err := tea.NewProgram(&m, tea.WithAltScreen(), tea.WithMouseAllMotion()).Run()
+	_, err := tea.NewProgram(&m, tea.WithAltScreen()).Run()
 	return err
 }

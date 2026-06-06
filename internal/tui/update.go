@@ -62,7 +62,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+k" {
+	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+k" && !(m.state == stateChat && m.activePane == 0) {
 		m.showModelSwitcher = !m.showModelSwitcher
 		return m, nil
 	}
@@ -219,8 +219,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() != "ctrl+c" && isTerminalNoise(msg, m.chatOpenedAt) {
 			break
 		}
-		// Inline option picker takes precedence when active.
-		if m.optionsActive {
+		// Inline option picker takes precedence only while the chat pane is
+		// active. When focus is on the right pane, arrows should navigate the
+		// preview/explorer even if the picker remains visible.
+		if m.optionsActive && m.activePane == 0 {
 			handled, pickCmd := m.handleOptionKey(msg)
 			if pickCmd != nil {
 				cmds = append(cmds, pickCmd)
@@ -228,8 +230,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if handled {
 				break
 			}
-			// Fall through: user pressed something we don't treat as a pick,
-			// so dismiss the picker and let the keystroke reach the input.
+			// Fall through: user pressed a normal pane/input shortcut that
+			// should keep working while the picker is visible.
 		}
 		switch msg.String() {
 		case "enter":
@@ -533,6 +535,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notesView.SetContent(msg.content)
 			m.notesView.GotoTop()
 			log.Printf("preview updated: %s", m.lastFile)
+		} else if strings.TrimSpace(m.notesView.View()) == "Rendering preview..." {
+			m.notesView.SetContent(msg.content)
+			m.notesView.GotoTop()
+			log.Printf("preview updated from stale render: rendered=%s current=%s", msg.path, m.lastFile)
+		} else {
+			log.Printf("preview render ignored: rendered=%s current=%s", msg.path, m.lastFile)
 		}
 		if m.state == stateChat {
 			cmds = append(cmds, m.watchFiles())
@@ -1134,6 +1142,8 @@ func openChatAfter(d time.Duration) tea.Cmd {
 // raw markdown instead of Glamour so the typing effect stays immediate.
 const livePreviewMinDelta = 8
 
+const previewRenderTimeout = 12 * time.Second
+
 // updateLivePreview pushes the partial body of an in-progress <<<FILE>>>
 // block into the notes preview pane as raw text with a cursor. The final
 // fileChangedMsg renders the saved markdown once the block is complete.
@@ -1171,9 +1181,16 @@ func renderReaderFile(path string, width int, raw bool) string {
 	if raw {
 		return body
 	}
+	return renderMarkdownBody(path, body, width)
+}
+
+func renderMarkdownBody(path, body string, width int) string {
 	ext := strings.TrimPrefix(filepath.Ext(path), ".")
 	if ext != "" && ext != "md" && ext != "markdown" {
 		body = fmt.Sprintf("# %s\n\n```%s\n%s\n```\n", filepath.Base(path), ext, body)
+	}
+	if width <= 0 {
+		width = 80
 	}
 	renderer, err := glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(width))
 	if err != nil {
@@ -1184,6 +1201,32 @@ func renderReaderFile(path string, width int, raw bool) string {
 		return body
 	}
 	return out
+}
+
+func renderPreviewFile(path string, width int) string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("Could not read preview: %v", err)
+	}
+	body := string(content)
+	done := make(chan string, 1)
+	go func() {
+		done <- renderMarkdownBody(path, body, width)
+	}()
+	start := time.Now()
+	select {
+	case out := <-done:
+		if elapsed := time.Since(start); elapsed > time.Second {
+			log.Printf("preview render completed slowly: %s elapsed=%s", path, elapsed)
+		}
+		if out == "" {
+			return "(preview is empty)"
+		}
+		return out
+	case <-time.After(previewRenderTimeout):
+		log.Printf("preview render timed out; showing raw fallback: %s", path)
+		return body
+	}
 }
 
 // startPreSession seeds the conversation with the appropriate pre-session
@@ -1342,6 +1385,9 @@ func (m *model) handleOptionKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.optionsActive = false
 		m.refreshChatView()
 		return true, nil
+	case "tab", "pgup", "pgdown", "alt+pgup", "shift+pgup", "alt+pgdown", "shift+pgdown",
+		"ctrl+j", "shift+enter", "ctrl+backspace", "alt+backspace", "ctrl+u", "ctrl+w", "ctrl+k":
+		return false, nil
 	}
 	// Digit shortcut: "1".. picks the Nth option directly.
 	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
@@ -1406,10 +1452,11 @@ func (m *model) syncComposerAttachments() {
 func isTerminalNoise(msg tea.KeyMsg, mountedAt time.Time) bool {
 	// Alt-modified keys: we never bind anything to alt+X, and the terminal's
 	// escape responses always start with alt+] or alt+\\ (the leading ESC byte).
-	// However, we must allow alt+left, alt+right, alt+b, alt+f, alt+pgup, alt+pgdown for navigation.
+	// However, we must allow alt-modified editing/navigation keys that the
+	// textarea binds in the chat composer.
 	if msg.Alt {
 		s := msg.String()
-		if s == "alt+left" || s == "alt+right" || s == "alt+b" || s == "alt+f" || s == "alt+pgup" || s == "alt+pgdown" {
+		if s == "alt+left" || s == "alt+right" || s == "alt+b" || s == "alt+f" || s == "alt+backspace" || s == "alt+delete" || s == "alt+d" || s == "alt+pgup" || s == "alt+pgdown" {
 			return false
 		}
 		return true
@@ -1492,7 +1539,7 @@ func nextWordStart(val string, pos int) int {
 
 func renderFileCmd(path string, width int) tea.Cmd {
 	return func() tea.Msg {
-		out := renderFileForWidth(path, width)
+		out := renderPreviewFile(path, width)
 		return fileRenderedMsg{path: path, content: out}
 	}
 }
