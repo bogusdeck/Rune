@@ -1295,8 +1295,9 @@ h1 {
   flex-shrink: 0;
 }
 
-.footer-logo pre {
-  margin: 0;
+.footer-logo pre,
+.footer-ascii {
+  margin: 0 0 28px;
   color: var(--magenta);
   background: linear-gradient(
     105deg,
@@ -1317,9 +1318,6 @@ h1 {
   font-weight: 800;
   line-height: 1.02;
   letter-spacing: -0.06em;
-  text-shadow:
-    0 0 28px rgba(255, 122, 246, 0.22),
-    0 0 64px rgba(255, 122, 246, 0.1);
   white-space: pre;
 }
 
