@@ -275,7 +275,7 @@ a {
   position: relative;
   z-index: 3;
   flex: 0 0 auto;
-  width: min(520px, 100%);
+  width: min(640px, 100%);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -284,7 +284,7 @@ a {
 .hero-ascii {
   margin: 0 0 20px;
   font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: clamp(7px, 1.4vw, 18px);
+  font-size: clamp(12px, 2.2vw, 26px);
   font-weight: 700;
   line-height: 1.08;
   letter-spacing: -0.04em;
@@ -1302,6 +1302,7 @@ h1 {
 .footer {
   position: relative;
   display: grid;
+  justify-items: center;
   gap: 26px;
   padding: 62px clamp(18px, 5vw, 72px) 34px;
   color: var(--muted);
@@ -1368,6 +1369,7 @@ h1 {
   align-items: center;
   gap: 18px;
   font-size: 15px;
+  width: 100%;
 }
 
 .footer-meta span,
