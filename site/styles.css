@@ -1236,6 +1236,7 @@ h1 {
   gap: 24px;
   width: min-content;
   max-width: 100%;
+  margin: 0 auto;
   overflow: hidden;
 }
 
