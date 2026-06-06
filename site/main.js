@@ -1,18 +1,14 @@
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
+
 document.documentElement.classList.add("js");
 
 document.addEventListener("DOMContentLoaded", () => {
-  const { gsap } = window;
-
-  if (!gsap || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     document.documentElement.classList.remove("js");
     return;
-  }
-
-  const scrollTrigger = window.ScrollTrigger;
-  if (scrollTrigger) {
-    gsap.registerPlugin(scrollTrigger);
-  } else {
-    gsap.set(".capability-intro, .capability-grid article, .steps article, .feature-grid article, .video-grid article, .command-panel", { opacity: 1 });
   }
 
   const hero = document.querySelector(".hero");
@@ -168,7 +164,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Refresh ScrollTrigger calculations after everything (videos, images) fully loads
 window.addEventListener("load", () => {
-  if (window.ScrollTrigger) {
-    window.ScrollTrigger.refresh();
-  }
+  ScrollTrigger.refresh();
 });
