@@ -1,10 +1,21 @@
-<p align="center">
-  <img src="site/public/assets/logo.png" alt="Rune Logo" width="240" />
-</p>
+<table>
+  <tr>
+    <td valign="middle">
+      <img src="site/public/assets/logo.png" alt="Rune Logo" width="120" />
+    </td>
+    <td valign="middle">
+      <pre>
+██████╗ ██╗   ██╗███╗   ██╗███████╗
+██╔══██╗██║   ██║████╗  ██║██╔════╝
+██████╔╝██║   ██║██╔██╗ ██║█████╗
+██╔══██╗██║   ██║██║╚██╗██║██╔══╝
+██║  ██║╚██████╔╝██║ ╚████║███████╗
+╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝</pre>
+    </td>
+  </tr>
+</table>
 
-<h1 align="center">Rune</h1>
-
-<p align="center">
+<p>
   Rune is a terminal-first note-making app built with Go.<br>
   Pick a topic, chat through it, and generate structured markdown notes that are written to disk and previewed live inside a dual-panel tabbed TUI.
 </p>
