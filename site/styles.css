@@ -1240,8 +1240,8 @@ h1 {
 }
 
 .footer-logo-img {
-  width: clamp(32px, 5vw, 48px);
-  height: clamp(32px, 5vw, 48px);
+  width: clamp(64px, 10vw, 96px);
+  height: clamp(64px, 10vw, 96px);
   flex-shrink: 0;
 }
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/public/assets/logo.png" alt="Rune Logo" width="120" />
+  <img src="site/public/assets/logo.png" alt="Rune Logo" width="240" />
 </p>
 
 <h1 align="center">Rune</h1>
