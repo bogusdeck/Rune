@@ -76,6 +76,11 @@ Demonstrating how topic session history and previous chats are reloaded on start
 
 ![Resuming Previous Sessions](site/public/assets/previous_chat_loading.gif)
 
+#### 3. Document & File Attachments
+Demonstrating how to attach files and documents (PDFs, markdown, CSVs, etc.) as context for topic sessions.
+
+![Document & File Attachments](site/public/assets/attachement.gif)
+
 #### Missing / Required Demos:
 To complete the demo section, the following feature recordings are still needed:
 - **Topic Classification**: Showing how a user enters a topic (e.g., Go, linear algebra) and Rune classifies it as a learning or research session.

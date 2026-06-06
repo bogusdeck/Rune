@@ -40,7 +40,14 @@ func (m *model) layout() {
 
 func (m *model) layoutPanes() {
 	leftPaneWidth, rightPaneWidth := m.splitPaneWidths()
+	if m.copyMode {
+		leftPaneWidth = max(20, m.width-4)
+		rightPaneWidth = leftPaneWidth
+	}
 	paneHeight := m.height - 5
+	if m.resizeMode {
+		paneHeight--
+	}
 	composerHeight := m.chatComposerHeight()
 
 	m.chatInput.SetWidth(max(20, leftPaneWidth-8))
@@ -65,8 +72,12 @@ func (m *model) layoutPanes() {
 	if attachments := m.renderComposerAttachments(leftPaneWidth - 2); attachments != "" {
 		attachmentsHeight = lipgloss.Height(attachments)
 	}
+	livePreviewNoticeHeight := 0
+	if notice := m.renderLivePreviewNotice(leftPaneWidth - 2); notice != "" {
+		livePreviewNoticeHeight = lipgloss.Height(notice)
+	}
 
-	leftChromeHeight := 1 + inputBoxHeight + attachmentsHeight + 1
+	leftChromeHeight := 1 + livePreviewNoticeHeight + inputBoxHeight + attachmentsHeight + 1
 	m.chatView.Height = max(6, paneHeight-2-leftChromeHeight)
 	m.notesView.Height = paneHeight - 2
 }
@@ -270,7 +281,14 @@ func (m *model) View() string {
 	}
 
 	leftPaneWidth, rightPaneWidth := m.splitPaneWidths()
+	if m.copyMode {
+		leftPaneWidth = max(20, m.width-4)
+		rightPaneWidth = leftPaneWidth
+	}
 	paneHeight := m.height - 5
+	if m.resizeMode {
+		paneHeight--
+	}
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")).Padding(0, 1)
 	loc := m.providerModeLabel()
@@ -328,9 +346,11 @@ func (m *model) View() string {
 		Padding(0, 1).
 		Render(m.chatInput.View())
 	attachments := m.renderComposerAttachments(leftPaneWidth - 2)
+	livePreviewNotice := m.renderLivePreviewNotice(leftPaneWidth - 2)
 
 	leftInner := lipgloss.JoinVertical(lipgloss.Left,
 		m.chatView.View(),
+		livePreviewNotice,
 		sep,
 		inputBox,
 		attachments,
@@ -357,27 +377,67 @@ func (m *model) View() string {
 	}
 	rightPane := rightPaneStyle(m.activePane == 1).Render(rightInner)
 
-	panes := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat ", m.activePane == 0, leftPaneWidth), leftPane),
-		lipgloss.JoinVertical(lipgloss.Left, activeLabel(rightLabel, m.activePane == 1, rightPaneWidth), rightPane),
-	)
+	var panes string
+	if m.copyMode {
+		if m.activePane == 0 {
+			panes = lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat · Copy Layout ", true, leftPaneWidth), leftPane)
+		} else {
+			panes = lipgloss.JoinVertical(lipgloss.Left, activeLabel(strings.TrimSpace(rightLabel)+" · Copy Layout ", true, rightPaneWidth), rightPane)
+		}
+	} else {
+		panes = lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat ", m.activePane == 0, leftPaneWidth), leftPane),
+			lipgloss.JoinVertical(lipgloss.Left, activeLabel(rightLabel, m.activePane == 1, rightPaneWidth), rightPane),
+		)
+	}
 
 	statusLine := ""
 	if m.streaming {
 		statusLine = "  • streaming…"
+	} else if m.resizeMode {
+		statusLine = "  • resizing layout"
 	} else if m.optionsActive {
 		statusLine = "  • picker active (↑↓ / 1–9 / enter / esc)"
+	} else if m.copyMode {
+		statusLine = "  • copy layout"
 	}
 
-	row1 := " ctrl+c: quit  •  tab: switch pane  •  enter: reader/preview file"
+	layoutToggle := "copy layout"
+	if m.copyMode {
+		layoutToggle = "split layout"
+	}
+	row1 := fmt.Sprintf(" ctrl+c: quit  •  tab: switch pane  •  ctrl+y: %s  •  ctrl+g: resize layout", layoutToggle)
 	row2 := " ctrl+o: home  •  ctrl+e: explorer  •  ctrl+t: settings  •  ctrl+k: switch model  •  ctrl+r: rewind  •  ctrl+l: logs" + statusLine
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	help := lipgloss.JoinVertical(lipgloss.Left,
+	helpLines := []string{
 		helpStyle.Render(row1),
 		helpStyle.Render(row2),
-	)
+	}
+	if m.resizeMode {
+		helpLines = append(helpLines, m.renderResizePrompt())
+	}
+	help := lipgloss.JoinVertical(lipgloss.Left, helpLines...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, panes, help)
+}
+
+func (m *model) renderResizePrompt() string {
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
+	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	fieldStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("63")).
+		Padding(0, 1)
+	left := fieldStyle.Render(m.resizeLeft.View())
+	right := fieldStyle.Render(m.resizeRight.View())
+	return lipgloss.JoinHorizontal(lipgloss.Left,
+		labelStyle.Render(" layout "),
+		helpStyle.Render("left "),
+		left,
+		helpStyle.Render(" right "),
+		right,
+		helpStyle.Render("  tab: field  enter: apply  esc: cancel"),
+	)
 }
 
 func (m *model) renderComposerAttachments(width int) string {
@@ -400,6 +460,26 @@ func (m *model) renderComposerAttachments(width int) string {
 	}
 	help := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("backspace on empty input removes last attachment")
 	return lipgloss.JoinVertical(lipgloss.Left, label, lipgloss.JoinHorizontal(lipgloss.Left, chips...), help)
+}
+
+func (m *model) renderLivePreviewNotice(width int) string {
+	if !m.copyMode || m.activePane != 0 {
+		return ""
+	}
+	text := m.fileNotice
+	if m.writingFile != "" {
+		text = fmt.Sprintf("writing %s live in preview - press tab to view", filepath.Base(m.writingFile))
+	}
+	if text == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("230")).
+		Background(lipgloss.Color("57")).
+		Bold(true).
+		Width(max(20, width)).
+		Padding(0, 1).
+		Render(truncatePlain(text, max(20, width-2)))
 }
 
 // ---- Topic-selection screen ----
@@ -1012,7 +1092,7 @@ func (m *model) renderExplorer(width, height int) string {
 		b.WriteString(emptyStyle.Render("  (no files yet — once the AI writes one it will appear here)"))
 		return b.String()
 	}
-	b.WriteString(metaStyle.Render(fmt.Sprintf("  %d item(s) · tree view", total)) + "\n\n")
+	b.WriteString(metaStyle.Render(fmt.Sprintf("  %d item(s) · tree view · d delete · a rename", total)) + "\n\n")
 
 	root := filepath.Base(m.workDir)
 	if root == "." || root == string(filepath.Separator) {
@@ -1021,7 +1101,11 @@ func (m *model) renderExplorer(width, height int) string {
 	b.WriteString(dirStyle.Render("  "+root+"/") + "\n")
 
 	lines := renderTreeLines(entries, "", width, nameStyle, dirStyle, metaStyle)
-	maxLines := height - 5
+	footer := m.renderExplorerFooter(metaStyle)
+	maxLines := height - 6
+	if footer == "" {
+		maxLines = height - 5
+	}
 	if maxLines < 1 {
 		maxLines = len(lines)
 	}
@@ -1050,7 +1134,29 @@ func (m *model) renderExplorer(width, height int) string {
 		}
 		b.WriteString(line + "\n")
 	}
+	if footer != "" {
+		b.WriteString("\n")
+		b.WriteString(footer)
+	}
 	return b.String()
+}
+
+func (m *model) renderExplorerFooter(metaStyle lipgloss.Style) string {
+	switch {
+	case m.renameTarget != "":
+		return metaStyle.Render("  rename: ") + m.renameInput.View()
+	case m.deleteTarget != "":
+		name := filepath.Base(m.deleteTarget)
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("88")).
+			Bold(true).
+			Render(fmt.Sprintf("  Delete %q?  y confirm · n/esc cancel  ", name))
+	case m.explorerStatus != "":
+		return metaStyle.Render("  " + m.explorerStatus)
+	default:
+		return ""
+	}
 }
 
 func renderTreeLines(entries []treeEntry, prefix string, width int, nameStyle, dirStyle, metaStyle lipgloss.Style) []explorerLine {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,11 +37,19 @@ func (m *model) sendUserMessage() tea.Cmd {
 	}
 	m.chatInput.SetValue("")
 	m.composerAttachmentPaths = nil
+	if m.filesDirty {
+		m.messages = append(m.messages, chatMessage{
+			Role:    "system",
+			Content: "The user changed files in the workspace. Sync to this current file tree before answering:\n\n" + m.currentFilesContext(),
+		})
+		m.filesDirty = false
+	}
 	m.messages = append(m.messages, chatMessage{Role: "user", Content: text, ImagePaths: imagePaths, FilePaths: attachmentPaths})
 	m.displayMsgs = append(m.displayMsgs, displayMsg{Role: "user", Content: text})
 	m.pendingAsst = ""
 	m.streaming = true
 	m.streamHadWrite = false
+	m.fileNotice = ""
 	m.refreshSystemPromptForPersonalization()
 	m.refreshChatView()
 	return m.startStreamAndWait()
@@ -65,6 +74,21 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+k" && !(m.state == stateChat && m.activePane == 0) {
 		m.showModelSwitcher = !m.showModelSwitcher
 		return m, nil
+	}
+
+	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+y" && m.state == stateChat {
+		m.copyMode = !m.copyMode
+		m.layoutPanes()
+		return m, nil
+	}
+
+	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+g" && m.state == stateChat {
+		m.openResizeMode()
+		return m, nil
+	}
+
+	if m.resizeMode {
+		return m.updateResizeMode(msg)
 	}
 
 	if m.showSettings {
@@ -106,6 +130,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.showExplorer {
 			m.explorerScroll = 0
 			m.explorerCursor = 0
+			m.explorerStatus = ""
+			m.deleteTarget = ""
+			m.renameTarget = ""
+			m.renameInput.SetValue("")
+			m.renameInput.Blur()
 		}
 		log.Printf("explorer toggled: %v", m.showExplorer)
 		return m, nil
@@ -219,6 +248,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() != "ctrl+c" && isTerminalNoise(msg, m.chatOpenedAt) {
 			break
 		}
+		if m.showExplorer && m.activePane == 1 {
+			handled, c := m.handleExplorerActionKey(msg)
+			if c != nil {
+				cmds = append(cmds, c)
+			}
+			if handled {
+				break
+			}
+		}
 		// Inline option picker takes precedence only while the chat pane is
 		// active. When focus is on the right pane, arrows should navigate the
 		// preview/explorer even if the picker remains visible.
@@ -244,7 +282,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if c := m.sendUserMessage(); c != nil {
 				cmds = append(cmds, c)
 			}
-		case "ctrl+j", "shift+enter":
+		case "ctrl+j", "shift+enter", "alt+enter":
 			if m.activePane == 0 {
 				m.chatInput.InsertRune('\n')
 				m.syncComposerAttachments()
@@ -262,8 +300,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			if m.activePane == 0 {
 				m.activePane = 1
+				m.fileNotice = ""
 			} else {
 				m.activePane = 0
+			}
+			if m.copyMode {
+				m.layoutPanes()
 			}
 		case "pgup":
 			m.scrollActivePane(-1, true)
@@ -283,6 +325,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.syncComposerAttachments()
 				cmds = append(cmds, cmd)
 			}
+		}
+
+	case fmt.Stringer:
+		if m.state == stateChat && m.activePane == 0 && isEnhancedShiftEnter(msg.String()) {
+			m.chatInput.InsertRune('\n')
+			m.syncComposerAttachments()
 		}
 
 	case loadingTickMsg:
@@ -584,6 +632,78 @@ func (m *model) closeSettings() {
 	m.showSettings = false
 	m.syncProviderState()
 	m.refreshSystemPromptForPersonalization()
+}
+
+func (m *model) openResizeMode() {
+	m.copyMode = false
+	m.resizeMode = true
+	m.resizeFocus = 0
+	left := max(25, min(75, m.splitPercent))
+	m.resizeLeft.SetValue(strconv.Itoa(left))
+	m.resizeRight.SetValue(strconv.Itoa(100 - left))
+	m.resizeLeft.Focus()
+	m.resizeRight.Blur()
+	m.layoutPanes()
+}
+
+func (m *model) updateResizeMode(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	switch keyMsg.String() {
+	case "esc":
+		m.closeResizeMode(false)
+		return m, nil
+	case "enter":
+		m.closeResizeMode(true)
+		return m, nil
+	case "tab", "shift+tab":
+		if m.resizeFocus == 0 {
+			m.resizeFocus = 1
+			m.resizeLeft.Blur()
+			m.resizeRight.Focus()
+		} else {
+			m.resizeFocus = 0
+			m.resizeRight.Blur()
+			m.resizeLeft.Focus()
+		}
+		return m, nil
+	}
+	if m.resizeFocus == 0 {
+		m.resizeLeft, cmd = m.resizeLeft.Update(msg)
+	} else {
+		m.resizeRight, cmd = m.resizeRight.Update(msg)
+	}
+	return m, cmd
+}
+
+func (m *model) closeResizeMode(apply bool) {
+	if apply {
+		if left, ok := parseSplitPercent(m.resizeLeft.Value(), m.resizeRight.Value()); ok {
+			m.splitPercent = left
+		}
+	}
+	m.resizeMode = false
+	m.resizeLeft.Blur()
+	m.resizeRight.Blur()
+	m.layoutPanes()
+}
+
+func parseSplitPercent(leftValue, rightValue string) (int, bool) {
+	left, leftErr := strconv.Atoi(strings.TrimSpace(leftValue))
+	right, rightErr := strconv.Atoi(strings.TrimSpace(rightValue))
+	switch {
+	case leftErr == nil && rightErr == nil && left+right > 0:
+		return max(25, min(75, left*100/(left+right))), true
+	case leftErr == nil:
+		return max(25, min(75, left)), true
+	case rightErr == nil:
+		return max(25, min(75, 100-right)), true
+	default:
+		return 0, false
+	}
 }
 
 func (m *model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -977,6 +1097,202 @@ func (m *model) previewSelectedExplorerFile() tea.Cmd {
 	}
 }
 
+func (m *model) selectedExplorerLine() (explorerLine, bool) {
+	lines := m.explorerLines(max(20, m.notesView.Width))
+	if len(lines) == 0 {
+		return explorerLine{}, false
+	}
+	if m.explorerCursor < 0 {
+		m.explorerCursor = 0
+	}
+	if m.explorerCursor >= len(lines) {
+		m.explorerCursor = len(lines) - 1
+	}
+	selected := lines[m.explorerCursor]
+	if selected.path == "" || !m.pathInWorkDir(selected.path) {
+		return explorerLine{}, false
+	}
+	return selected, true
+}
+
+func (m *model) handleExplorerActionKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+	if m.deleteTarget != "" {
+		switch msg.String() {
+		case "y", "Y":
+			return true, m.confirmExplorerDelete()
+		case "n", "N", "esc":
+			m.deleteTarget = ""
+			m.explorerStatus = "delete cancelled"
+			return true, nil
+		default:
+			return true, nil
+		}
+	}
+	if m.renameTarget != "" {
+		var cmd tea.Cmd
+		switch msg.String() {
+		case "enter":
+			return true, m.confirmExplorerRename()
+		case "esc":
+			m.cancelExplorerRename()
+			return true, nil
+		}
+		m.renameInput, cmd = m.renameInput.Update(msg)
+		return true, cmd
+	}
+	switch msg.String() {
+	case "d":
+		selected, ok := m.selectedExplorerLine()
+		if !ok {
+			m.explorerStatus = "nothing selected"
+			return true, nil
+		}
+		m.deleteTarget = selected.path
+		kind := "file"
+		if selected.isDir {
+			kind = "folder"
+		}
+		m.explorerStatus = fmt.Sprintf("delete %s %q? y/n", kind, filepath.Base(selected.path))
+		return true, nil
+	case "a":
+		selected, ok := m.selectedExplorerLine()
+		if !ok {
+			m.explorerStatus = "nothing selected"
+			return true, nil
+		}
+		m.renameTarget = selected.path
+		name := filepath.Base(selected.path)
+		if selected.isDir {
+			name = strings.TrimSuffix(name, string(filepath.Separator))
+		}
+		m.renameInput.SetValue(name)
+		m.renameInput.CursorEnd()
+		m.renameInput.Focus()
+		m.explorerStatus = "rename: enter to save, esc to cancel"
+		return true, m.renameInput.Focus()
+	}
+	return false, nil
+}
+
+func (m *model) confirmExplorerDelete() tea.Cmd {
+	target := m.deleteTarget
+	m.deleteTarget = ""
+	if target == "" || !m.pathInWorkDir(target) {
+		m.explorerStatus = "delete blocked: invalid path"
+		return nil
+	}
+	if err := os.RemoveAll(target); err != nil {
+		m.explorerStatus = "delete failed: " + err.Error()
+		return nil
+	}
+	if sameOrChild(m.lastFile, target) {
+		m.lastFile = ""
+		m.notesView.SetContent("")
+	}
+	m.filesDirty = true
+	m.selectExplorerNearest(target)
+	m.explorerStatus = "deleted " + filepath.Base(target)
+	m.saveSession()
+	log.Printf("explorer delete: %s", target)
+	return nil
+}
+
+func (m *model) confirmExplorerRename() tea.Cmd {
+	target := m.renameTarget
+	newName := strings.TrimSpace(m.renameInput.Value())
+	m.cancelExplorerRename()
+	if target == "" || !m.pathInWorkDir(target) {
+		m.explorerStatus = "rename blocked: invalid path"
+		return nil
+	}
+	if newName == "" || strings.ContainsRune(newName, filepath.Separator) {
+		m.explorerStatus = "rename failed: use a simple name"
+		return nil
+	}
+	next := filepath.Join(filepath.Dir(target), newName)
+	if !m.pathInWorkDir(next) {
+		m.explorerStatus = "rename blocked: invalid path"
+		return nil
+	}
+	if _, err := os.Stat(next); err == nil {
+		m.explorerStatus = "rename failed: target exists"
+		return nil
+	}
+	if err := os.Rename(target, next); err != nil {
+		m.explorerStatus = "rename failed: " + err.Error()
+		return nil
+	}
+	if sameOrChild(m.lastFile, target) {
+		rel, err := filepath.Rel(target, m.lastFile)
+		if err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+			m.lastFile = filepath.Join(next, rel)
+		} else {
+			m.lastFile = next
+		}
+	}
+	m.filesDirty = true
+	m.selectExplorerPath(next)
+	m.explorerStatus = fmt.Sprintf("renamed %s to %s", filepath.Base(target), filepath.Base(next))
+	m.saveSession()
+	log.Printf("explorer rename: %s -> %s", target, next)
+	if m.lastFile == next && !isDirPath(next) {
+		return func() tea.Msg { return fileChangedMsg(next) }
+	}
+	return nil
+}
+
+func (m *model) cancelExplorerRename() {
+	m.renameTarget = ""
+	m.renameInput.SetValue("")
+	m.renameInput.Blur()
+	m.explorerStatus = "rename cancelled"
+}
+
+func (m *model) pathInWorkDir(path string) bool {
+	if m.workDir == "" || path == "" {
+		return false
+	}
+	workDir, err := filepath.Abs(m.workDir)
+	if err != nil {
+		return false
+	}
+	target, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(workDir, target)
+	return err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
+}
+
+func sameOrChild(path, target string) bool {
+	if path == "" || target == "" {
+		return false
+	}
+	rel, err := filepath.Rel(target, path)
+	return err == nil && (rel == "." || !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
+}
+
+func isDirPath(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func (m *model) selectExplorerNearest(path string) {
+	parent := filepath.Dir(path)
+	if m.pathInWorkDir(parent) {
+		m.selectExplorerPath(parent)
+	}
+	lines := m.explorerLines(max(20, m.notesView.Width))
+	if len(lines) == 0 {
+		m.explorerCursor = 0
+		m.explorerScroll = 0
+		return
+	}
+	if m.explorerCursor >= len(lines) {
+		m.explorerCursor = len(lines) - 1
+	}
+}
+
 func (m *model) handleWrittenFiles(paths []string) tea.Cmd {
 	if len(paths) == 0 {
 		return nil
@@ -987,6 +1303,7 @@ func (m *model) handleWrittenFiles(paths []string) tea.Cmd {
 	}
 	m.lastFile = last
 	m.streamHadWrite = true
+	m.fileNotice = fmt.Sprintf("created/updated %s - press tab to preview", filepath.Base(last))
 	m.showExplorer = false
 	m.selectExplorerPath(last)
 	return func() tea.Msg {
@@ -1031,13 +1348,24 @@ func (m *model) beginOpenTopic(topic string) tea.Cmd {
 	m.streamHadWrite = false
 	m.writingFile = ""
 	m.livePreviewSize = 0
+	m.fileNotice = ""
 	m.lastFile = ""
 	m.composerAttachmentPaths = nil
 	m.notesView.SetContent("")
 	m.showExplorer = false
 	m.explorerScroll = 0
 	m.explorerCursor = 0
+	m.explorerStatus = ""
+	m.deleteTarget = ""
+	m.renameTarget = ""
+	m.renameInput.SetValue("")
+	m.renameInput.Blur()
+	m.filesDirty = false
 	m.activePane = 0
+	m.copyMode = true
+	m.resizeMode = false
+	m.resizeLeft.Blur()
+	m.resizeRight.Blur()
 	m.state = stateLoading
 	m.loadingFrame = 0
 	m.loadingMessage = fmt.Sprintf("Opening %q…", topic)
@@ -1386,7 +1714,7 @@ func (m *model) handleOptionKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.refreshChatView()
 		return true, nil
 	case "tab", "pgup", "pgdown", "alt+pgup", "shift+pgup", "alt+pgdown", "shift+pgdown",
-		"ctrl+j", "shift+enter", "ctrl+backspace", "alt+backspace", "ctrl+u", "ctrl+w", "ctrl+k":
+		"ctrl+j", "shift+enter", "alt+enter", "ctrl+backspace", "alt+backspace", "ctrl+u", "ctrl+w", "ctrl+k":
 		return false, nil
 	}
 	// Digit shortcut: "1".. picks the Nth option directly.
@@ -1435,13 +1763,11 @@ func (m *model) pickOption(idx int) tea.Cmd {
 }
 
 func (m *model) syncComposerAttachments() {
-	cleaned, paths := extractAttachmentPathsAndCleanText(m.chatInput.Value())
+	paths := findAttachmentPathsInText(m.chatInput.Value())
 	if len(paths) == 0 {
 		return
 	}
 	m.composerAttachmentPaths = mergeUniquePaths(m.composerAttachmentPaths, paths)
-	m.chatInput.SetValue(cleaned)
-	m.chatInput.CursorEnd()
 }
 
 // isTerminalNoise returns true when msg is almost certainly not real user
@@ -1456,7 +1782,7 @@ func isTerminalNoise(msg tea.KeyMsg, mountedAt time.Time) bool {
 	// textarea binds in the chat composer.
 	if msg.Alt {
 		s := msg.String()
-		if s == "alt+left" || s == "alt+right" || s == "alt+b" || s == "alt+f" || s == "alt+backspace" || s == "alt+delete" || s == "alt+d" || s == "alt+pgup" || s == "alt+pgdown" {
+		if s == "alt+left" || s == "alt+right" || s == "alt+b" || s == "alt+f" || s == "alt+enter" || s == "alt+backspace" || s == "alt+delete" || s == "alt+d" || s == "alt+pgup" || s == "alt+pgdown" {
 			return false
 		}
 		return true
@@ -1475,6 +1801,19 @@ func isTerminalNoise(msg tea.KeyMsg, mountedAt time.Time) bool {
 		return true
 	}
 	return false
+}
+
+func isEnhancedShiftEnter(s string) bool {
+	// Some terminals encode Shift+Enter with CSI-u or modifyOtherKeys. Bubble
+	// Tea v1.3.x does not name that key, so it arrives as unknown CSI bytes.
+	switch s {
+	case "?CSI[49 51 59 50 117]?", // ESC [ 13 ; 2 u
+		"?CSI[50 55 59 50 59 49 51 126]?", // ESC [ 27 ; 2 ; 13 ~
+		"?CSI[49 51 59 50 126]?":          // ESC [ 13 ; 2 ~
+		return true
+	default:
+		return false
+	}
 }
 
 func looksLikeDroppedPathChunk(s string) bool {
@@ -1547,9 +1886,9 @@ func renderFileCmd(path string, width int) tea.Cmd {
 func (m *model) currentFilesContext() string {
 	files := listWorkspaceFiles(m.workDir)
 	if len(files) == 0 {
-		return "Files currently existing in the notes directory: (none yet)"
+		return "Files and folders currently existing in the notes directory: (none yet)"
 	}
-	return "Files currently existing in the notes directory:\n- " + strings.Join(files, "\n- ")
+	return "Files and folders currently existing in the notes directory:\n- " + strings.Join(files, "\n- ")
 }
 
 func listWorkspaceFiles(dir string) []string {
@@ -1563,6 +1902,7 @@ func listWorkspaceFiles(dir string) []string {
 				rel = prefix + "/" + item.name
 			}
 			if item.isDir {
+				files = append(files, rel+"/")
 				walk(item.children, rel)
 			} else {
 				files = append(files, rel)

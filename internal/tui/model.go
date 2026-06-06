@@ -111,6 +111,7 @@ type model struct {
 	// throttle re-rendering with glamour.
 	writingFile     string
 	livePreviewSize int
+	fileNotice      string
 
 	// streamWritten tracks file names that writeFileBlocks has already
 	// committed to disk during the current stream. Prevents the per-chunk
@@ -169,10 +170,20 @@ type model struct {
 	showExplorer   bool
 	explorerScroll int
 	explorerCursor int
+	explorerStatus string
+	deleteTarget   string
+	renameTarget   string
+	renameInput    textinput.Model
+	filesDirty     bool
 	// activePane controls which split pane receives simple scroll keys.
 	// 0 = chat, 1 = right pane (preview/explorer).
 	activePane    int
+	copyMode      bool
 	splitPercent  int
+	resizeMode    bool
+	resizeFocus   int
+	resizeLeft    textinput.Model
+	resizeRight   textinput.Model
 	resizingSplit bool
 
 	width  int
@@ -235,6 +246,23 @@ func initialModel() model {
 	settingsProfile.CharLimit = 4000
 	settingsProfile.ShowLineNumbers = false
 	settingsProfile.Blur()
+
+	renameInput := textinput.New()
+	renameInput.Placeholder = "new name"
+	renameInput.CharLimit = 200
+	renameInput.Blur()
+
+	resizeLeft := textinput.New()
+	resizeLeft.CharLimit = 3
+	resizeLeft.Width = 4
+	resizeLeft.Placeholder = "70"
+	resizeLeft.Blur()
+
+	resizeRight := textinput.New()
+	resizeRight.CharLimit = 3
+	resizeRight.Width = 4
+	resizeRight.Placeholder = "30"
+	resizeRight.Blur()
 
 	chatVP := viewport.New(0, 0)
 	chatVP.MouseWheelEnabled = true
@@ -302,6 +330,7 @@ func initialModel() model {
 		settingsAntigravityCommand: settingsAntigravityCommand,
 		settingsEditor:             settingsEditor,
 		settingsProfile:            settingsProfile,
+		renameInput:                renameInput,
 		chatView:                   chatVP,
 		notesView:                  notesVP,
 		readerView:                 readerVP,
@@ -316,7 +345,10 @@ func initialModel() model {
 		streamCh:                   make(chan tea.Msg, 64),
 		topicList:                  topics,
 		topicCursor:                cursor,
+		copyMode:                   true,
 		splitPercent:               70,
+		resizeLeft:                 resizeLeft,
+		resizeRight:                resizeRight,
 	}
 	m.syncProviderState()
 	return m

@@ -41,14 +41,42 @@ func extractAttachmentPathsAndCleanText(text string) (string, []string) {
 	var paths []string
 
 	for _, line := range lines {
+		linePaths := findAttachmentPathsInText(line)
+		if len(linePaths) > 0 && strings.TrimSpace(removeAttachmentText(line, linePaths)) == "" {
+			paths = append(paths, linePaths...)
+			continue
+		}
+		kept = append(kept, line)
+		paths = append(paths, linePaths...)
+	}
+
+	return strings.TrimSpace(strings.Join(kept, "\n")), paths
+}
+
+func findAttachmentPathsInText(text string) []string {
+	var paths []string
+	for _, line := range strings.Split(text, "\n") {
 		if path, ok := parseDroppedAttachmentPath(line); ok {
 			paths = append(paths, path)
 			continue
 		}
-		kept = append(kept, line)
+		for _, field := range strings.Fields(line) {
+			if path, ok := parseDroppedAttachmentPath(field); ok {
+				paths = append(paths, path)
+			}
+		}
 	}
+	return mergeUniquePaths(nil, paths)
+}
 
-	return strings.TrimSpace(strings.Join(kept, "\n")), paths
+func removeAttachmentText(line string, paths []string) string {
+	out := line
+	for _, path := range paths {
+		out = strings.ReplaceAll(out, path, "")
+		out = strings.ReplaceAll(out, shellEscapePath(path), "")
+		out = strings.ReplaceAll(out, fileURIPath(path), "")
+	}
+	return out
 }
 
 func mergeUniquePaths(base []string, more []string) []string {
@@ -105,6 +133,21 @@ func parseDroppedAttachmentPath(line string) (string, bool) {
 		return "", false
 	}
 	return s, true
+}
+
+func shellEscapePath(path string) string {
+	replacer := strings.NewReplacer(
+		" ", `\ `,
+		"(", `\(`,
+		")", `\)`,
+		"&", `\&`,
+	)
+	return replacer.Replace(path)
+}
+
+func fileURIPath(path string) string {
+	u := url.URL{Scheme: "file", Path: path}
+	return u.String()
 }
 
 func splitAttachmentPaths(paths []string) (images []string, docs []string) {
