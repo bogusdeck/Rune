@@ -57,7 +57,7 @@ a {
   align-items: center;
   gap: clamp(32px, 5vw, 72px);
   padding: 72px clamp(18px, 5vw, 72px) 72px;
-  overflow: hidden;
+  overflow: clip;
   border-bottom: 1px solid rgba(154, 169, 255, 0.18);
 }
 
@@ -166,6 +166,7 @@ a {
 }
 
 .terminal-window-main {
+  max-height: calc(100svh - 144px);
   transform: perspective(1200px) rotateX(3deg) rotateY(-5deg);
   transform-origin: right center;
   overflow: hidden;
@@ -217,15 +218,17 @@ a {
 
 .terminal-screenshot-wrap {
   width: 100%;
+  max-height: calc(100svh - 188px);
   line-height: 0;
   overflow: hidden;
 }
 
 .terminal-screenshot {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
   object-fit: cover;
+  object-position: top left;
 }
 
 .terminal-grid {
