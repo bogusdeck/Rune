@@ -53,8 +53,9 @@ a {
   --dither-y: 0px;
   min-height: 100vh;
   min-height: 100svh;
-  display: grid;
-  align-items: end;
+  display: flex;
+  align-items: center;
+  gap: clamp(32px, 5vw, 72px);
   padding: 72px clamp(18px, 5vw, 72px) 72px;
   overflow: hidden;
   border-bottom: 1px solid rgba(154, 169, 255, 0.18);
@@ -146,10 +147,11 @@ a {
 }
 
 .terminal-backdrop {
-  position: absolute;
-  inset: 0;
-  padding: 38px clamp(18px, 4vw, 68px) 56px;
+  position: relative;
+  flex: 1 1 55%;
+  min-width: 0;
   opacity: 0.9;
+  z-index: 2;
 }
 
 .terminal-window {
@@ -265,8 +267,11 @@ a {
 .hero-content {
   position: relative;
   z-index: 3;
-  max-width: 1040px;
-  width: 100%;
+  flex: 0 0 auto;
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .eyebrow {
@@ -294,9 +299,8 @@ h1 {
 
 .hero-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 40px;
+  flex-direction: column;
+  gap: 28px;
   margin-top: 26px;
 }
 
