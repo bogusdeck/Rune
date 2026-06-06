@@ -164,9 +164,9 @@ a {
 }
 
 .terminal-window-main {
-  min-height: 620px;
   transform: perspective(1200px) rotateX(3deg) rotateY(-5deg);
   transform-origin: right center;
+  overflow: hidden;
 }
 
 .terminal-bar {
@@ -211,6 +211,19 @@ a {
   white-space: pre;
   overflow: hidden;
   text-shadow: 0 0 22px rgba(255, 122, 246, 0.26);
+}
+
+.terminal-screenshot-wrap {
+  width: 100%;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.terminal-screenshot {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
 }
 
 .terminal-grid {
