@@ -1,7 +1,13 @@
-# Rune
+<p align="center">
+  <img src="site/public/assets/logo.png" alt="Rune Logo" width="120" />
+</p>
 
-Rune is a terminal-first note-making app built with Go.  
-Pick a topic, chat through it, and generate structured markdown notes that are written to disk and previewed live inside a dual-panel tabbed TUI.
+<h1 align="center">Rune</h1>
+
+<p align="center">
+  Rune is a terminal-first note-making app built with Go.<br>
+  Pick a topic, chat through it, and generate structured markdown notes that are written to disk and previewed live inside a dual-panel tabbed TUI.
+</p>
 
 ## Why Rune
 
