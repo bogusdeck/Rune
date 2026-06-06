@@ -1077,6 +1077,40 @@ h1 {
   font-family: "Space Grotesk", sans-serif;
 }
 
+.video-grid article.has-video {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  min-height: auto;
+  padding: 0;
+}
+
+.video-grid article .video-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(103, 164, 255, 0.16);
+}
+
+.video-grid article .video-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.video-grid article .video-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  background: transparent;
+  z-index: 1;
+}
+
 .footer {
   position: relative;
   display: grid;

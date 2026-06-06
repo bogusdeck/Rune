@@ -264,17 +264,27 @@ go build -o rune .
           <p>Use these slots for a full walkthrough, attachment demo, provider switching, and live preview clips.</p>
         </div>
         <div class="video-grid">
-          <article aria-label="Full walkthrough video placeholder">
-            <span>Full walkthrough</span>
-            <strong>01</strong>
+          <article class="has-video" aria-label="Full walkthrough video">
+            <div class="video-wrapper">
+              <video src="/assets/full_tutorial.mp4" controls preload="metadata" playsinline></video>
+            </div>
+            <div class="video-meta">
+              <span>Full walkthrough</span>
+              <strong>01</strong>
+            </div>
           </article>
           <article aria-label="Attachment workflow video placeholder">
             <span>Attachment workflow</span>
             <strong>02</strong>
           </article>
-          <article aria-label="Auto routing video placeholder">
-            <span>Auto routing</span>
-            <strong>03</strong>
+          <article class="has-video" aria-label="Auto routing video">
+            <div class="video-wrapper">
+              <video src="/assets/model_switching.mp4" controls preload="metadata" playsinline></video>
+            </div>
+            <div class="video-meta">
+              <span>Auto routing</span>
+              <strong>03</strong>
+            </div>
           </article>
         </div>
       </section>
