@@ -330,12 +330,12 @@ h1 {
 }
 
 .hero-subtitle {
-  margin: 0 0 8px;
-  font-size: clamp(16px, 2vw, 24px);
-  line-height: 1.35;
+  margin: 0 0 20px;
+  font-size: clamp(28px, 4vw, 52px);
+  line-height: 1.15;
   color: var(--soft);
-  font-weight: 500;
-  max-width: 480px;
+  font-weight: 600;
+  max-width: 560px;
 }
 
 .hero-row {
