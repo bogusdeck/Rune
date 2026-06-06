@@ -248,6 +248,13 @@ a {
   color: var(--green) !important;
 }
 
+.hero-logo-img {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 20px;
+  display: block;
+}
+
 .hero-content {
   position: relative;
   z-index: 3;
@@ -1230,9 +1237,18 @@ h1 {
 
 .footer-logo {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
   width: min-content;
   max-width: 100%;
   overflow: hidden;
+}
+
+.footer-logo-img {
+  width: clamp(32px, 5vw, 48px);
+  height: clamp(32px, 5vw, 48px);
+  flex-shrink: 0;
 }
 
 .footer-logo pre {
