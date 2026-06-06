@@ -78,6 +78,9 @@ type model struct {
 	settingsCodexCommand       textinput.Model
 	settingsCodexModel         textinput.Model
 	settingsAntigravityCommand textinput.Model
+	settingsAntigravityModel   textinput.Model
+	settingsClaudeCommand      textinput.Model
+	settingsClaudeModel        textinput.Model
 	settingsEditor             textinput.Model
 	settingsProfile            textarea.Model
 
@@ -175,16 +178,9 @@ type model struct {
 	renameTarget   string
 	renameInput    textinput.Model
 	filesDirty     bool
-	// activePane controls which split pane receives simple scroll keys.
+	// activePane controls which pane receives simple scroll keys and is currently rendered.
 	// 0 = chat, 1 = right pane (preview/explorer).
 	activePane    int
-	copyMode      bool
-	splitPercent  int
-	resizeMode    bool
-	resizeFocus   int
-	resizeLeft    textinput.Model
-	resizeRight   textinput.Model
-	resizingSplit bool
 
 	width  int
 	height int
@@ -222,7 +218,7 @@ func initialModel() model {
 	settingsEditor.Blur()
 
 	settingsProvider := textinput.New()
-	settingsProvider.Placeholder = "ollama, codex, antigravity"
+	settingsProvider.Placeholder = "ollama, codex, claude, antigravity, auto"
 	settingsProvider.CharLimit = 32
 	settingsProvider.Blur()
 
@@ -237,9 +233,24 @@ func initialModel() model {
 	settingsCodexModel.Blur()
 
 	settingsAntigravityCommand := textinput.New()
-	settingsAntigravityCommand.Placeholder = "antigravity"
+	settingsAntigravityCommand.Placeholder = "agy"
 	settingsAntigravityCommand.CharLimit = 200
 	settingsAntigravityCommand.Blur()
+
+	settingsAntigravityModel := textinput.New()
+	settingsAntigravityModel.Placeholder = "optional model override"
+	settingsAntigravityModel.CharLimit = 80
+	settingsAntigravityModel.Blur()
+
+	settingsClaudeCommand := textinput.New()
+	settingsClaudeCommand.Placeholder = "claude"
+	settingsClaudeCommand.CharLimit = 200
+	settingsClaudeCommand.Blur()
+
+	settingsClaudeModel := textinput.New()
+	settingsClaudeModel.Placeholder = "sonnet, opus, or full model name"
+	settingsClaudeModel.CharLimit = 80
+	settingsClaudeModel.Blur()
 
 	settingsProfile := textarea.New()
 	settingsProfile.Placeholder = "Education, experience, goals, learning preferences, recurring context..."
@@ -251,18 +262,6 @@ func initialModel() model {
 	renameInput.Placeholder = "new name"
 	renameInput.CharLimit = 200
 	renameInput.Blur()
-
-	resizeLeft := textinput.New()
-	resizeLeft.CharLimit = 3
-	resizeLeft.Width = 4
-	resizeLeft.Placeholder = "70"
-	resizeLeft.Blur()
-
-	resizeRight := textinput.New()
-	resizeRight.CharLimit = 3
-	resizeRight.Width = 4
-	resizeRight.Placeholder = "30"
-	resizeRight.Blur()
 
 	chatVP := viewport.New(0, 0)
 	chatVP.MouseWheelEnabled = true
@@ -293,6 +292,9 @@ func initialModel() model {
 	settingsCodexCommand.SetValue(cfg.CodexCommand)
 	settingsCodexModel.SetValue(cfg.CodexModel)
 	settingsAntigravityCommand.SetValue(cfg.AntigravityCommand)
+	settingsAntigravityModel.SetValue(cfg.AntigravityModel)
+	settingsClaudeCommand.SetValue(cfg.ClaudeCommand)
+	settingsClaudeModel.SetValue(cfg.ClaudeModel)
 	settingsProfile.SetValue(cfg.PersonalProfile)
 
 	// Decide which model to start with. Cloud is preferred; we probe it once
@@ -328,6 +330,9 @@ func initialModel() model {
 		settingsCodexCommand:       settingsCodexCommand,
 		settingsCodexModel:         settingsCodexModel,
 		settingsAntigravityCommand: settingsAntigravityCommand,
+		settingsAntigravityModel:   settingsAntigravityModel,
+		settingsClaudeCommand:      settingsClaudeCommand,
+		settingsClaudeModel:        settingsClaudeModel,
 		settingsEditor:             settingsEditor,
 		settingsProfile:            settingsProfile,
 		renameInput:                renameInput,
@@ -345,10 +350,6 @@ func initialModel() model {
 		streamCh:                   make(chan tea.Msg, 64),
 		topicList:                  topics,
 		topicCursor:                cursor,
-		copyMode:                   true,
-		splitPercent:               70,
-		resizeLeft:                 resizeLeft,
-		resizeRight:                resizeRight,
 	}
 	m.syncProviderState()
 	return m
@@ -370,7 +371,18 @@ func (m *model) syncProviderState() {
 		}
 	case providerAntigravity:
 		m.usingCloud = false
-		m.modelName = "external"
+		if strings.TrimSpace(m.config.AntigravityModel) != "" {
+			m.modelName = strings.TrimSpace(m.config.AntigravityModel)
+		} else {
+			m.modelName = "default"
+		}
+	case providerClaude:
+		m.usingCloud = false
+		if strings.TrimSpace(m.config.ClaudeModel) != "" {
+			m.modelName = strings.TrimSpace(m.config.ClaudeModel)
+		} else {
+			m.modelName = "default"
+		}
 	default:
 		active := m.localModel
 		m.usingCloud = false

@@ -15,6 +15,9 @@ type AppConfig struct {
 	CodexCommand       string `json:"codex_command"`
 	CodexModel         string `json:"codex_model"`
 	AntigravityCommand string `json:"antigravity_command"`
+	AntigravityModel   string `json:"antigravity_model"`
+	ClaudeCommand      string `json:"claude_command"`
+	ClaudeModel        string `json:"claude_model"`
 }
 
 func DefaultAppConfig() AppConfig {
@@ -25,7 +28,10 @@ func DefaultAppConfig() AppConfig {
 		Provider:           "ollama",
 		CodexCommand:       "codex",
 		CodexModel:         "",
-		AntigravityCommand: "antigravity",
+		AntigravityCommand: "agy",
+		AntigravityModel:   "",
+		ClaudeCommand:      "claude",
+		ClaudeModel:        "",
 	}
 }
 
@@ -56,7 +62,10 @@ func LoadAppConfig(notesRoot string) AppConfig {
 		cfg.CodexCommand = "codex"
 	}
 	if strings.TrimSpace(cfg.AntigravityCommand) == "" {
-		cfg.AntigravityCommand = "antigravity"
+		cfg.AntigravityCommand = "agy"
+	}
+	if strings.TrimSpace(cfg.ClaudeCommand) == "" {
+		cfg.ClaudeCommand = "claude"
 	}
 	return cfg
 }

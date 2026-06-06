@@ -39,29 +39,25 @@ func (m *model) layout() {
 }
 
 func (m *model) layoutPanes() {
-	leftPaneWidth, rightPaneWidth := m.splitPaneWidths()
-	if m.copyMode {
-		leftPaneWidth = max(20, m.width-4)
-		rightPaneWidth = leftPaneWidth
-	}
+	paneWidth := max(20, m.width-4)
 	paneHeight := m.height - 5
-	if m.resizeMode {
-		paneHeight--
-	}
 	composerHeight := m.chatComposerHeight()
 
-	m.chatInput.SetWidth(max(20, leftPaneWidth-8))
+	m.chatInput.SetWidth(max(20, paneWidth-8))
 	m.chatInput.SetHeight(composerHeight)
 	m.settingsProvider.Width = max(20, m.width-8)
 	m.settingsCodexCommand.Width = max(20, m.width-8)
 	m.settingsCodexModel.Width = max(20, m.width-8)
 	m.settingsAntigravityCommand.Width = max(20, m.width-8)
+	m.settingsAntigravityModel.Width = max(20, m.width-8)
+	m.settingsClaudeCommand.Width = max(20, m.width-8)
+	m.settingsClaudeModel.Width = max(20, m.width-8)
 	m.settingsEditor.Width = max(20, m.width-8)
 	m.settingsProfile.SetWidth(max(20, m.width-8))
 	m.settingsProfile.SetHeight(max(6, m.height-12))
 
-	m.chatView.Width = leftPaneWidth - 2
-	m.notesView.Width = rightPaneWidth - 2
+	m.chatView.Width = paneWidth - 2
+	m.notesView.Width = paneWidth - 2
 
 	inputBoxHeight := lipgloss.Height(lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -69,11 +65,11 @@ func (m *model) layoutPanes() {
 		Padding(0, 1).
 		Render(m.chatInput.View()))
 	attachmentsHeight := 0
-	if attachments := m.renderComposerAttachments(leftPaneWidth - 2); attachments != "" {
+	if attachments := m.renderComposerAttachments(paneWidth - 2); attachments != "" {
 		attachmentsHeight = lipgloss.Height(attachments)
 	}
 	livePreviewNoticeHeight := 0
-	if notice := m.renderLivePreviewNotice(leftPaneWidth - 2); notice != "" {
+	if notice := m.renderLivePreviewNotice(paneWidth - 2); notice != "" {
 		livePreviewNoticeHeight = lipgloss.Height(notice)
 	}
 
@@ -85,29 +81,6 @@ func (m *model) layoutPanes() {
 func (m *model) chatComposerHeight() int {
 	lines := strings.Count(m.chatInput.Value(), "\n") + 1
 	return max(3, min(6, lines))
-}
-
-func (m *model) splitPaneWidths() (int, int) {
-	available := m.width - 4
-	if available < 20 {
-		return max(10, available/2), max(10, available/2)
-	}
-	percent := m.splitPercent
-	if percent == 0 {
-		percent = 70
-	}
-	percent = max(25, min(75, percent))
-	left := available * percent / 100
-	right := available - left
-	if right < 24 && available > 64 {
-		right = 24
-		left = available - right
-	}
-	if left < 40 && available > 64 {
-		left = 40
-		right = available - left
-	}
-	return left, right
 }
 
 // ---- Styles ----
@@ -280,15 +253,8 @@ func (m *model) View() string {
 		return "Initializing..."
 	}
 
-	leftPaneWidth, rightPaneWidth := m.splitPaneWidths()
-	if m.copyMode {
-		leftPaneWidth = max(20, m.width-4)
-		rightPaneWidth = leftPaneWidth
-	}
+	paneWidth := max(20, m.width-4)
 	paneHeight := m.height - 5
-	if m.resizeMode {
-		paneHeight--
-	}
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5")).Padding(0, 1)
 	loc := m.providerModeLabel()
@@ -315,18 +281,7 @@ func (m *model) View() string {
 		return lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor).
-			Width(leftPaneWidth).
-			Height(paneHeight)
-	}
-	rightPaneStyle := func(active bool) lipgloss.Style {
-		borderColor := lipgloss.Color("62")
-		if active {
-			borderColor = lipgloss.Color("213")
-		}
-		return lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(borderColor).
-			Width(rightPaneWidth).
+			Width(paneWidth).
 			Height(paneHeight)
 	}
 	activeLabel := func(label string, active bool, width int) string {
@@ -338,15 +293,15 @@ func (m *model) View() string {
 		return style.Render(text)
 	}
 
-	sep := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Repeat("─", leftPaneWidth-2))
+	sep := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Repeat("─", paneWidth-2))
 	inputHint := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("enter: send  •  shift+enter / ctrl+j: newline")
 	inputBox := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("99")).
 		Padding(0, 1).
 		Render(m.chatInput.View())
-	attachments := m.renderComposerAttachments(leftPaneWidth - 2)
-	livePreviewNotice := m.renderLivePreviewNotice(leftPaneWidth - 2)
+	attachments := m.renderComposerAttachments(paneWidth - 2)
+	livePreviewNotice := m.renderLivePreviewNotice(paneWidth - 2)
 
 	leftInner := lipgloss.JoinVertical(lipgloss.Left,
 		m.chatView.View(),
@@ -361,7 +316,7 @@ func (m *model) View() string {
 	var rightInner string
 	var rightLabel string
 	if m.showExplorer {
-		rightInner = m.renderExplorer(rightPaneWidth-2, paneHeight-2)
+		rightInner = m.renderExplorer(paneWidth-2, paneHeight-2)
 		rightLabel = " [2] Explorer "
 	} else {
 		rightInner = m.notesView.View()
@@ -375,70 +330,35 @@ func (m *model) View() string {
 			rightLabel = fmt.Sprintf(" [2] Notes Preview: %s ", previewName)
 		}
 	}
-	rightPane := rightPaneStyle(m.activePane == 1).Render(rightInner)
+	rightPane := paneStyle(m.activePane == 1).Render(rightInner)
 
 	var panes string
-	if m.copyMode {
-		if m.activePane == 0 {
-			panes = lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat · Copy Layout ", true, leftPaneWidth), leftPane)
-		} else {
-			panes = lipgloss.JoinVertical(lipgloss.Left, activeLabel(strings.TrimSpace(rightLabel)+" · Copy Layout ", true, rightPaneWidth), rightPane)
-		}
+	if m.activePane == 0 {
+		panes = lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat ", true, paneWidth), leftPane)
 	} else {
-		panes = lipgloss.JoinHorizontal(lipgloss.Top,
-			lipgloss.JoinVertical(lipgloss.Left, activeLabel(" [1] Chat ", m.activePane == 0, leftPaneWidth), leftPane),
-			lipgloss.JoinVertical(lipgloss.Left, activeLabel(rightLabel, m.activePane == 1, rightPaneWidth), rightPane),
-		)
+		panes = lipgloss.JoinVertical(lipgloss.Left, activeLabel(strings.TrimSpace(rightLabel), true, paneWidth), rightPane)
 	}
 
 	statusLine := ""
 	if m.streaming {
 		statusLine = "  • streaming…"
-	} else if m.resizeMode {
-		statusLine = "  • resizing layout"
 	} else if m.optionsActive {
 		statusLine = "  • picker active (↑↓ / 1–9 / enter / esc)"
-	} else if m.copyMode {
-		statusLine = "  • copy layout"
 	}
 
-	layoutToggle := "copy layout"
-	if m.copyMode {
-		layoutToggle = "split layout"
-	}
-	row1 := fmt.Sprintf(" ctrl+c: quit  •  tab: switch pane  •  ctrl+y: %s  •  ctrl+g: resize layout", layoutToggle)
+	row1 := " ctrl+c: quit  •  tab: switch pane"
 	row2 := " ctrl+o: home  •  ctrl+e: explorer  •  ctrl+t: settings  •  ctrl+k: switch model  •  ctrl+r: rewind  •  ctrl+l: logs" + statusLine
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	helpLines := []string{
 		helpStyle.Render(row1),
 		helpStyle.Render(row2),
 	}
-	if m.resizeMode {
-		helpLines = append(helpLines, m.renderResizePrompt())
-	}
 	help := lipgloss.JoinVertical(lipgloss.Left, helpLines...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, panes, help)
 }
 
-func (m *model) renderResizePrompt() string {
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	fieldStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		Padding(0, 1)
-	left := fieldStyle.Render(m.resizeLeft.View())
-	right := fieldStyle.Render(m.resizeRight.View())
-	return lipgloss.JoinHorizontal(lipgloss.Left,
-		labelStyle.Render(" layout "),
-		helpStyle.Render("left "),
-		left,
-		helpStyle.Render(" right "),
-		right,
-		helpStyle.Render("  tab: field  enter: apply  esc: cancel"),
-	)
-}
+
 
 func (m *model) renderComposerAttachments(width int) string {
 	if len(m.composerAttachmentPaths) == 0 {
@@ -463,7 +383,7 @@ func (m *model) renderComposerAttachments(width int) string {
 }
 
 func (m *model) renderLivePreviewNotice(width int) string {
-	if !m.copyMode || m.activePane != 0 {
+	if m.activePane != 0 {
 		return ""
 	}
 	text := m.fileNotice
@@ -679,7 +599,7 @@ func (m *model) viewSettingsScreen() string {
 		helpStyle.Render("tab: switch field  •  ctrl+p: toggle  •  esc/ctrl+t: save and close"),
 		"",
 		labelStyle.Render("Provider"),
-		helpStyle.Render("Choose backend: ollama, codex, or antigravity."),
+		helpStyle.Render("Choose backend: ollama, codex, claude, antigravity, or auto."),
 		m.settingsProvider.View(),
 		"",
 		labelStyle.Render("Codex command"),
@@ -691,8 +611,20 @@ func (m *model) viewSettingsScreen() string {
 		m.settingsCodexModel.View(),
 		"",
 		labelStyle.Render("Antigravity command"),
-		helpStyle.Render("Shell command Rune should run for Antigravity backend."),
+		helpStyle.Render("CLI used for Antigravity backend, typically just: agy"),
 		m.settingsAntigravityCommand.View(),
+		"",
+		labelStyle.Render("Antigravity model"),
+		helpStyle.Render("Optional. Leave empty to use Antigravity default model."),
+		m.settingsAntigravityModel.View(),
+		"",
+		labelStyle.Render("Claude command"),
+		helpStyle.Render("CLI used for Claude backend, typically just: claude"),
+		m.settingsClaudeCommand.View(),
+		"",
+		labelStyle.Render("Claude model"),
+		helpStyle.Render("Optional. Examples: sonnet, opus, or a full Claude model name."),
+		m.settingsClaudeModel.View(),
 		"",
 		labelStyle.Render("Document editor"),
 		helpStyle.Render("Used by reader edit mode. Examples: vim, nano, emacs, code --wait."),
@@ -704,7 +636,7 @@ func (m *model) viewSettingsScreen() string {
 
 	boxWidth := max(40, m.width-6)
 	boxHeight := max(12, m.height-4)
-	profileHeight := max(6, min(12, boxHeight-26))
+	profileHeight := max(4, min(10, boxHeight-38))
 	m.settingsProfile.SetHeight(profileHeight)
 
 	body := lipgloss.JoinVertical(lipgloss.Left,
@@ -733,8 +665,8 @@ func (m *model) viewModelSwitcher() string {
 	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("57"))
 
 	var lines []string
-	lines = append(lines, titleStyle.Render("MODEL SWITCHER"))
-	lines = append(lines, metaStyle.Render("ctrl+k/esc: close  •  ↑↓: select  •  enter: apply"))
+	lines = append(lines, titleStyle.Render("PROVIDER / MODEL SWITCHER"))
+	lines = append(lines, metaStyle.Render("ctrl+k/esc: close  •  ↑↓: choose provider+model  •  enter: apply"))
 	lines = append(lines, "")
 	for i, preset := range m.modelSwitcherPresets() {
 		line := fmt.Sprintf("%s — %s", preset.label, preset.description)

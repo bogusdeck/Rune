@@ -17,6 +17,7 @@ const (
 	providerOllama      = "ollama"
 	providerCodex       = "codex"
 	providerAntigravity = "antigravity"
+	providerClaude      = "claude"
 	providerAuto        = "auto"
 )
 
@@ -33,6 +34,8 @@ func normalizeProviderName(s string) string {
 		return providerCodex
 	case providerAntigravity:
 		return providerAntigravity
+	case providerClaude:
+		return providerClaude
 	case providerAuto:
 		return providerAuto
 	default:
@@ -52,6 +55,8 @@ func (m *model) providerDisplay() string {
 		return "codex"
 	case providerAntigravity:
 		return "antigravity"
+	case providerClaude:
+		return "claude"
 	default:
 		return "ollama"
 	}
@@ -67,7 +72,15 @@ func (m *model) runtimeLabel() string {
 		}
 		return "default"
 	case providerAntigravity:
-		return "external"
+		if strings.TrimSpace(m.config.AntigravityModel) != "" {
+			return m.config.AntigravityModel
+		}
+		return "default"
+	case providerClaude:
+		if strings.TrimSpace(m.config.ClaudeModel) != "" {
+			return m.config.ClaudeModel
+		}
+		return "default"
 	default:
 		return m.modelName
 	}
@@ -81,6 +94,8 @@ func (m *model) providerModeLabel() string {
 		return "codex"
 	case providerAntigravity:
 		return "antigravity"
+	case providerClaude:
+		return "claude"
 	default:
 		if m.usingCloud {
 			return "cloud"
@@ -98,7 +113,9 @@ func (m *model) providerForMessages(messages []chatMessage) llmProvider {
 	case providerCodex:
 		return codexProvider{workDir: m.workDir, command: strings.TrimSpace(m.config.CodexCommand), model: strings.TrimSpace(m.config.CodexModel)}
 	case providerAntigravity:
-		return antigravityProvider{workDir: m.workDir, command: strings.TrimSpace(m.config.AntigravityCommand)}
+		return antigravityProvider{workDir: m.workDir, command: strings.TrimSpace(m.config.AntigravityCommand), model: strings.TrimSpace(m.config.AntigravityModel)}
+	case providerClaude:
+		return claudeProvider{workDir: m.workDir, command: strings.TrimSpace(m.config.ClaudeCommand), model: strings.TrimSpace(m.config.ClaudeModel)}
 	default:
 		return ollamaProvider{
 			url:      m.ollamaURL,
@@ -119,6 +136,8 @@ func (m *model) effectiveProviderName(messages []chatMessage) string {
 		return providerCodex
 	case providerAntigravity:
 		return providerAntigravity
+	case providerClaude:
+		return providerClaude
 	default:
 		return providerOllama
 	}
@@ -161,6 +180,9 @@ func (m *model) autoProviderNameForMessages(messages []chatMessage) string {
 		if m.providerAvailable(providerAntigravity) {
 			return providerAntigravity
 		}
+		if m.providerAvailable(providerClaude) {
+			return providerClaude
+		}
 		return providerOllama
 	}
 
@@ -173,10 +195,16 @@ func (m *model) autoProviderNameForMessages(messages []chatMessage) string {
 		if m.providerAvailable(providerAntigravity) {
 			return providerAntigravity
 		}
+		if m.providerAvailable(providerClaude) {
+			return providerClaude
+		}
 		return providerOllama
 	case "medium":
 		if m.providerAvailable(providerAntigravity) {
 			return providerAntigravity
+		}
+		if m.providerAvailable(providerClaude) {
+			return providerClaude
 		}
 		if m.providerAvailable(providerCodex) {
 			return providerCodex
@@ -192,7 +220,9 @@ func (m *model) providerAvailable(name string) bool {
 	case providerCodex:
 		return fileExistsOnPath(firstNonEmpty(m.config.CodexCommand, "codex"))
 	case providerAntigravity:
-		return commandSeemsAvailable(firstNonEmpty(m.config.AntigravityCommand, "antigravity"))
+		return commandSeemsAvailable(firstNonEmpty(m.config.AntigravityCommand, "agy"))
+	case providerClaude:
+		return commandSeemsAvailable(firstNonEmpty(m.config.ClaudeCommand, "claude"))
 	default:
 		return true
 	}
@@ -283,7 +313,7 @@ type switcherPreset struct {
 }
 
 func (m *model) modelSwitcherPresets() []switcherPreset {
-	return []switcherPreset{
+	presets := []switcherPreset{
 		{
 			label:       "Auto",
 			description: "Route by complexity and attachments",
@@ -310,23 +340,86 @@ func (m *model) modelSwitcherPresets() []switcherPreset {
 				m.modelName = m.localModel
 			},
 		},
-		{
-			label:       "Codex",
-			description: "Use local Codex CLI backend",
+	}
+	for _, choice := range providerModelChoices(providerCodex, m.config.CodexModel) {
+		choice := choice
+		presets = append(presets, switcherPreset{
+			label:       "Codex · " + choice.label,
+			description: "Use Codex CLI with " + choice.description,
 			apply: func(m *model) {
 				m.config.Provider = providerCodex
+				m.config.CodexModel = choice.value
 				m.syncProviderState()
 			},
-		},
-		{
-			label:       "Antigravity",
-			description: "Use Antigravity CLI backend",
+		})
+	}
+	for _, choice := range providerModelChoices(providerClaude, m.config.ClaudeModel) {
+		choice := choice
+		presets = append(presets, switcherPreset{
+			label:       "Claude · " + choice.label,
+			description: "Use Claude Code CLI with " + choice.description,
+			apply: func(m *model) {
+				m.config.Provider = providerClaude
+				m.config.ClaudeModel = choice.value
+				m.syncProviderState()
+			},
+		})
+	}
+	for _, choice := range providerModelChoices(providerAntigravity, m.config.AntigravityModel) {
+		choice := choice
+		presets = append(presets, switcherPreset{
+			label:       "Antigravity · " + choice.label,
+			description: "Use Antigravity CLI with " + choice.description,
 			apply: func(m *model) {
 				m.config.Provider = providerAntigravity
+				m.config.AntigravityModel = choice.value
 				m.syncProviderState()
 			},
-		},
+		})
 	}
+	return presets
+}
+
+type providerModelChoice struct {
+	label       string
+	value       string
+	description string
+}
+
+func providerModelChoices(provider, configured string) []providerModelChoice {
+	choices := []providerModelChoice{{label: "default", value: "", description: "configured default model"}}
+	switch provider {
+	case providerCodex:
+		choices = append(choices,
+			providerModelChoice{label: "gpt-5", value: "gpt-5", description: "GPT-5"},
+			providerModelChoice{label: "gpt-5-codex", value: "gpt-5-codex", description: "GPT-5 Codex"},
+			providerModelChoice{label: "o3", value: "o3", description: "o3"},
+		)
+	case providerClaude:
+		choices = append(choices,
+			providerModelChoice{label: "sonnet", value: "sonnet", description: "Claude Sonnet alias"},
+			providerModelChoice{label: "opus", value: "opus", description: "Claude Opus alias"},
+		)
+	case providerAntigravity:
+		choices = append(choices,
+			providerModelChoice{label: "gemini-2.5-pro", value: "gemini-2.5-pro", description: "Gemini Pro"},
+			providerModelChoice{label: "gemini-2.5-flash", value: "gemini-2.5-flash", description: "Gemini Flash"},
+		)
+	}
+	configured = strings.TrimSpace(configured)
+	if configured != "" {
+		found := false
+		for _, choice := range choices {
+			if choice.value == configured {
+				found = true
+				break
+			}
+		}
+		if !found {
+			choices = append(choices, providerModelChoice{label: configured, value: configured, description: "configured custom model"})
+		}
+	}
+	return choices
 }
 
 func latestImages(messages []chatMessage) []string {
@@ -493,6 +586,7 @@ func (p codexProvider) Stream(ctx context.Context, messages []chatMessage, inclu
 type antigravityProvider struct {
 	workDir string
 	command string
+	model   string
 }
 
 func (p antigravityProvider) Name() string { return providerAntigravity }
@@ -502,9 +596,18 @@ func (p antigravityProvider) SupportsImages() bool { return false }
 func (p antigravityProvider) Complete(ctx context.Context, prompt string, _ []string) (string, error) {
 	command := strings.TrimSpace(p.command)
 	if command == "" {
-		command = "antigravity"
+		command = "agy"
 	}
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-lc", command)
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return "", fmt.Errorf("%s command is not configured", providerAntigravity)
+	}
+	args := append([]string(nil), fields[1:]...)
+	args = append(args, "--print")
+	if strings.TrimSpace(p.model) != "" {
+		args = append(args, "--model", strings.TrimSpace(p.model))
+	}
+	cmd := exec.CommandContext(ctx, fields[0], args...)
 	if p.workDir != "" {
 		cmd.Dir = p.workDir
 	}
@@ -542,6 +645,42 @@ func (p antigravityProvider) Stream(ctx context.Context, messages []chatMessage,
 		}
 		ch <- streamDoneMsg{err: nil}
 	}()
+}
+
+type claudeProvider struct {
+	workDir string
+	command string
+	model   string
+}
+
+func (p claudeProvider) Name() string { return providerClaude }
+
+func (p claudeProvider) SupportsImages() bool { return false }
+
+func (p claudeProvider) Complete(ctx context.Context, prompt string, _ []string) (string, error) {
+	cp := commandProvider{
+		name:           providerClaude,
+		command:        firstNonEmpty(p.command, "claude"),
+		args:           []string{"--print", "--no-session-persistence"},
+		modelFlag:      "--model",
+		model:          p.model,
+		workDir:        p.workDir,
+		supportsImages: false,
+	}
+	return cp.Complete(ctx, prompt, nil)
+}
+
+func (p claudeProvider) Stream(ctx context.Context, messages []chatMessage, includeReminder bool, ch chan<- tea.Msg) {
+	cp := commandProvider{
+		name:           providerClaude,
+		command:        firstNonEmpty(p.command, "claude"),
+		args:           []string{"--print", "--no-session-persistence"},
+		modelFlag:      "--model",
+		model:          p.model,
+		workDir:        p.workDir,
+		supportsImages: false,
+	}
+	cp.Stream(ctx, messages, includeReminder, ch)
 }
 
 func firstNonEmpty(values ...string) string {

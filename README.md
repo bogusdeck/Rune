@@ -1,7 +1,7 @@
 # Rune
 
 Rune is a terminal-first note-making app built with Go.  
-Pick a topic, chat through it, and generate structured markdown notes that are written to disk and previewed live inside a split-pane TUI.
+Pick a topic, chat through it, and generate structured markdown notes that are written to disk and previewed live inside a dual-panel tabbed TUI.
 
 ## Why Rune
 
@@ -17,7 +17,7 @@ It helps you:
 
 ## Features
 
-- Split-pane TUI for chat and live notes preview
+- Dual-panel tabbed TUI for chat and live notes preview
 - Topic classification into `skill` or `research` workflows
 - Pre-session guidance before the main session starts
 - Markdown file generation with live filesystem watching
@@ -49,7 +49,7 @@ Rune is built for users who prefer learning, researching, and writing without le
 2. Enter a topic such as `Java`, `system design`, or `linear algebra`
 3. Rune classifies the topic and begins a guided session
 4. Notes are generated as markdown files
-5. The right pane updates live as files are written
+5. Notes preview updates live on the second panel (switch to it with Tab)
 6. You can reopen the same topic later and continue where you left off
 
 ## Demo Videos
@@ -84,7 +84,7 @@ Demonstrating how to attach files and documents (PDFs, markdown, CSVs, etc.) as 
 #### Missing / Required Demos:
 To complete the demo section, the following feature recordings are still needed:
 - **Topic Classification**: Showing how a user enters a topic (e.g., Go, linear algebra) and Rune classifies it as a learning or research session.
-- **Live Notes Preview**: Zooming in on the split-pane rendering as files are created and updated live.
+- **Live Notes Preview**: Zooming in on the live document rendering as files are created and updated live.
 - **File Explorer & Settings**: Demonstrating `Ctrl+E` to toggle the file tree and `Ctrl+T` to adjust preferences.
 
 ## Requirements

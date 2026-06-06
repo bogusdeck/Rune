@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -76,20 +75,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+y" && m.state == stateChat {
-		m.copyMode = !m.copyMode
-		m.layoutPanes()
-		return m, nil
-	}
 
-	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+g" && m.state == stateChat {
-		m.openResizeMode()
-		return m, nil
-	}
-
-	if m.resizeMode {
-		return m.updateResizeMode(msg)
-	}
 
 	if m.showSettings {
 		return m.updateSettings(msg)
@@ -209,14 +195,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 
 	case tea.MouseMsg:
-		if m.handleSplitResize(msg) {
-			break
-		}
-		// Handle mouse wheel scrolling based on which side the mouse is on.
-		// This prevents both panes from scrolling simultaneously.
+		// Handle mouse wheel scrolling based on which pane is active.
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			if msg.X < m.currentDividerX() {
+			if m.activePane == 0 {
 				m.chatView.LineUp(3)
 			} else {
 				if m.showExplorer {
@@ -229,7 +211,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case tea.MouseButtonWheelDown:
-			if msg.X < m.currentDividerX() {
+			if m.activePane == 0 {
 				m.chatView.LineDown(3)
 			} else {
 				if m.showExplorer {
@@ -304,9 +286,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.activePane = 0
 			}
-			if m.copyMode {
-				m.layoutPanes()
-			}
+			m.layoutPanes()
 		case "pgup":
 			m.scrollActivePane(-1, true)
 		case "pgdown":
@@ -604,6 +584,9 @@ func (m *model) openSettings() {
 	m.settingsCodexCommand.SetValue(m.config.CodexCommand)
 	m.settingsCodexModel.SetValue(m.config.CodexModel)
 	m.settingsAntigravityCommand.SetValue(m.config.AntigravityCommand)
+	m.settingsAntigravityModel.SetValue(m.config.AntigravityModel)
+	m.settingsClaudeCommand.SetValue(m.config.ClaudeCommand)
+	m.settingsClaudeModel.SetValue(m.config.ClaudeModel)
 	m.settingsEditor.SetValue(m.config.DocumentEditor)
 	m.settingsProfile.SetValue(m.config.PersonalProfile)
 	m.settingsFocus = 0
@@ -611,6 +594,9 @@ func (m *model) openSettings() {
 	m.settingsCodexCommand.Blur()
 	m.settingsCodexModel.Blur()
 	m.settingsAntigravityCommand.Blur()
+	m.settingsAntigravityModel.Blur()
+	m.settingsClaudeCommand.Blur()
+	m.settingsClaudeModel.Blur()
 	m.settingsEditor.Blur()
 	m.settingsProfile.Blur()
 }
@@ -620,6 +606,9 @@ func (m *model) closeSettings() {
 	m.config.CodexCommand = strings.TrimSpace(m.settingsCodexCommand.Value())
 	m.config.CodexModel = strings.TrimSpace(m.settingsCodexModel.Value())
 	m.config.AntigravityCommand = strings.TrimSpace(m.settingsAntigravityCommand.Value())
+	m.config.AntigravityModel = strings.TrimSpace(m.settingsAntigravityModel.Value())
+	m.config.ClaudeCommand = strings.TrimSpace(m.settingsClaudeCommand.Value())
+	m.config.ClaudeModel = strings.TrimSpace(m.settingsClaudeModel.Value())
 	m.config.DocumentEditor = strings.TrimSpace(m.settingsEditor.Value())
 	m.config.PersonalProfile = strings.TrimSpace(m.settingsProfile.Value())
 	core.SaveAppConfig("", m.config)
@@ -627,6 +616,9 @@ func (m *model) closeSettings() {
 	m.settingsCodexCommand.Blur()
 	m.settingsCodexModel.Blur()
 	m.settingsAntigravityCommand.Blur()
+	m.settingsAntigravityModel.Blur()
+	m.settingsClaudeCommand.Blur()
+	m.settingsClaudeModel.Blur()
 	m.settingsEditor.Blur()
 	m.settingsProfile.Blur()
 	m.showSettings = false
@@ -634,77 +626,7 @@ func (m *model) closeSettings() {
 	m.refreshSystemPromptForPersonalization()
 }
 
-func (m *model) openResizeMode() {
-	m.copyMode = false
-	m.resizeMode = true
-	m.resizeFocus = 0
-	left := max(25, min(75, m.splitPercent))
-	m.resizeLeft.SetValue(strconv.Itoa(left))
-	m.resizeRight.SetValue(strconv.Itoa(100 - left))
-	m.resizeLeft.Focus()
-	m.resizeRight.Blur()
-	m.layoutPanes()
-}
 
-func (m *model) updateResizeMode(msg tea.Msg) (tea.Model, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return m, nil
-	}
-	var cmd tea.Cmd
-	switch keyMsg.String() {
-	case "esc":
-		m.closeResizeMode(false)
-		return m, nil
-	case "enter":
-		m.closeResizeMode(true)
-		return m, nil
-	case "tab", "shift+tab":
-		if m.resizeFocus == 0 {
-			m.resizeFocus = 1
-			m.resizeLeft.Blur()
-			m.resizeRight.Focus()
-		} else {
-			m.resizeFocus = 0
-			m.resizeRight.Blur()
-			m.resizeLeft.Focus()
-		}
-		return m, nil
-	}
-	if m.resizeFocus == 0 {
-		m.resizeLeft, cmd = m.resizeLeft.Update(msg)
-	} else {
-		m.resizeRight, cmd = m.resizeRight.Update(msg)
-	}
-	return m, cmd
-}
-
-func (m *model) closeResizeMode(apply bool) {
-	if apply {
-		if left, ok := parseSplitPercent(m.resizeLeft.Value(), m.resizeRight.Value()); ok {
-			m.splitPercent = left
-		}
-	}
-	m.resizeMode = false
-	m.resizeLeft.Blur()
-	m.resizeRight.Blur()
-	m.layoutPanes()
-}
-
-func parseSplitPercent(leftValue, rightValue string) (int, bool) {
-	left, leftErr := strconv.Atoi(strings.TrimSpace(leftValue))
-	right, rightErr := strconv.Atoi(strings.TrimSpace(rightValue))
-	switch {
-	case leftErr == nil && rightErr == nil && left+right > 0:
-		return max(25, min(75, left*100/(left+right))), true
-	case leftErr == nil:
-		return max(25, min(75, left)), true
-	case rightErr == nil:
-		return max(25, min(75, 100-right)), true
-	default:
-		return 0, false
-	}
-}
 
 func (m *model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -719,7 +641,7 @@ func (m *model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.closeSettings()
 			return m, nil
 		case "tab":
-			m.settingsFocus = (m.settingsFocus + 1) % 6
+			m.settingsFocus = (m.settingsFocus + 1) % 9
 			m.focusSettingsField()
 			return m, nil
 		case "ctrl+p":
@@ -742,6 +664,15 @@ func (m *model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settingsAntigravityCommand, cmd = m.settingsAntigravityCommand.Update(msg)
 		return m, cmd
 	case 4:
+		m.settingsAntigravityModel, cmd = m.settingsAntigravityModel.Update(msg)
+		return m, cmd
+	case 5:
+		m.settingsClaudeCommand, cmd = m.settingsClaudeCommand.Update(msg)
+		return m, cmd
+	case 6:
+		m.settingsClaudeModel, cmd = m.settingsClaudeModel.Update(msg)
+		return m, cmd
+	case 7:
 		m.settingsEditor, cmd = m.settingsEditor.Update(msg)
 		return m, cmd
 	default:
@@ -791,6 +722,9 @@ func (m *model) focusSettingsField() {
 	m.settingsCodexCommand.Blur()
 	m.settingsCodexModel.Blur()
 	m.settingsAntigravityCommand.Blur()
+	m.settingsAntigravityModel.Blur()
+	m.settingsClaudeCommand.Blur()
+	m.settingsClaudeModel.Blur()
 	m.settingsEditor.Blur()
 	m.settingsProfile.Blur()
 
@@ -804,6 +738,12 @@ func (m *model) focusSettingsField() {
 	case 3:
 		m.settingsAntigravityCommand.Focus()
 	case 4:
+		m.settingsAntigravityModel.Focus()
+	case 5:
+		m.settingsClaudeCommand.Focus()
+	case 6:
+		m.settingsClaudeModel.Focus()
+	case 7:
 		m.settingsEditor.Focus()
 	default:
 		_ = m.settingsProfile.Focus()
@@ -1033,46 +973,7 @@ func (m *model) scrollActivePane(direction int, page bool) {
 	}
 }
 
-func (m *model) currentDividerX() int {
-	leftWidth, _ := m.splitPaneWidths()
-	return leftWidth + 2
-}
 
-func (m *model) handleSplitResize(msg tea.MouseMsg) bool {
-	if m.state != stateChat || m.width <= 0 {
-		return false
-	}
-	divider := m.currentDividerX()
-	nearDivider := msg.X >= divider-1 && msg.X <= divider+1
-	switch msg.Action {
-	case tea.MouseActionPress:
-		if msg.Button == tea.MouseButtonLeft && nearDivider {
-			m.resizingSplit = true
-			return true
-		}
-	case tea.MouseActionRelease:
-		if m.resizingSplit {
-			m.resizingSplit = false
-			return true
-		}
-	case tea.MouseActionMotion:
-		if m.resizingSplit {
-			m.setSplitFromMouseX(msg.X)
-			return true
-		}
-	}
-	return false
-}
-
-func (m *model) setSplitFromMouseX(x int) {
-	available := m.width - 4
-	if available <= 0 {
-		return
-	}
-	percent := x * 100 / available
-	m.splitPercent = max(25, min(75, percent))
-	m.layout()
-}
 
 func (m *model) previewSelectedExplorerFile() tea.Cmd {
 	lines := m.explorerLines(max(20, m.notesView.Width))
@@ -1362,10 +1263,6 @@ func (m *model) beginOpenTopic(topic string) tea.Cmd {
 	m.renameInput.Blur()
 	m.filesDirty = false
 	m.activePane = 0
-	m.copyMode = true
-	m.resizeMode = false
-	m.resizeLeft.Blur()
-	m.resizeRight.Blur()
 	m.state = stateLoading
 	m.loadingFrame = 0
 	m.loadingMessage = fmt.Sprintf("Opening %q…", topic)
