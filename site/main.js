@@ -48,26 +48,19 @@ document.addEventListener("DOMContentLoaded", () => {
     .from(".hero-content > *", { y: 34, opacity: 0, stagger: 0.11, duration: 0.72 }, "-=0.65")
     .from(".terminal-grid > div", { y: 24, opacity: 0, stagger: 0.12, duration: 0.62 }, "-=0.5");
 
-  if (scrollTrigger) {
-    gsap.to(".terminal-window-main", {
-      yPercent: -8,
-      rotateY: -2,
-      ease: "none",
-      scrollTrigger: {
-        trigger: ".hero",
-        start: "top top",
-        end: "bottom top",
-        scrub: true,
-      },
-    });
-  }
+  gsap.to(".terminal-window-main", {
+    yPercent: -8,
+    rotateY: -2,
+    ease: "none",
+    scrollTrigger: {
+      trigger: ".hero",
+      start: "top top",
+      end: "bottom top",
+      scrub: true,
+    },
+  });
 
   gsap.utils.toArray(".capability-intro, .capability-grid article, .section-heading, .steps article, .feature-grid article, .command-panel, .video-grid article").forEach((item) => {
-    if (!scrollTrigger) {
-      gsap.to(item, { y: 0, opacity: 1, duration: 0.4 });
-      return;
-    }
-
     gsap.fromTo(
       item,
       { y: 44, opacity: 0 },
