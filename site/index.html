@@ -192,12 +192,21 @@
 
           <article class="feature-card">
             <div class="feature-media">
-              <img src="/assets/model_switching.gif" alt="Auto provider mode" class="feature-gif" />
-              <div class="provider-mock">
-                <div class="provider-nodes">
-                  <span class="provider-node">Ollama</span>
-                  <span class="provider-arrow">→</span>
-                  <span class="provider-node ant-node">Antigravity</span>
+              <div class="routing-mock">
+                <div class="routing-header">
+                  <span class="routing-status">routing mode: auto</span>
+                </div>
+                <div class="routing-body">
+                  <div class="routing-query">you: summarize resume.pdf</div>
+                  <div class="routing-flow">
+                    <span class="routing-step">local check...</span>
+                    <span class="routing-step">pdf detected...</span>
+                  </div>
+                  <div class="routing-pill-container">
+                    <div class="routing-pill pill-ollama">ollama</div>
+                    <div class="routing-pill pill-codex">codex</div>
+                    <div class="routing-pill pill-antigravity">antigravity</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -208,11 +217,20 @@
 
           <article class="feature-card">
             <div class="feature-media">
-              <img src="/assets/previous_chat_loading.gif" alt="Resumable topics" class="feature-gif" />
               <div class="session-mock">
-                <div class="session-history">
-                  <div class="session-item">history_turn_1.json</div>
-                  <div class="session-item">history_turn_2.json</div>
+                <div class="session-sidebar">
+                  <div class="session-title">topics</div>
+                  <div class="session-list">
+                    <div class="session-item">java</div>
+                    <div class="session-item">system_design</div>
+                    <div class="session-item item-active">golang</div>
+                  </div>
+                </div>
+                <div class="session-details">
+                  <div class="session-details-title">metadata</div>
+                  <div class="session-log-line">turns: 4</div>
+                  <div class="session-log-line">notes: 3 files</div>
+                  <div class="session-restore-status">restoring...</div>
                 </div>
               </div>
             </div>
