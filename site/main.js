@@ -121,4 +121,47 @@ window.addEventListener("load", () => {
       gsap.to(card, { rotateY: 0, rotateX: 0, y: 0, duration: 0.55, ease: "elastic.out(1, 0.45)" });
     });
   });
+
+  // Command panel cursor-following spotlight
+  const cmdPanel = document.querySelector(".command-panel");
+  if (cmdPanel) {
+    cmdPanel.addEventListener("pointermove", (event) => {
+      const rect = cmdPanel.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 100;
+      const y = ((event.clientY - rect.top) / rect.height) * 100;
+      cmdPanel.style.setProperty("--cursor-x", `${x}%`);
+      cmdPanel.style.setProperty("--cursor-y", `${y}%`);
+    });
+  }
+
+  // Command panel copy functionality
+  const copyBtn = document.querySelector(".copy-button");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      const codeElement = document.querySelector(".command-panel code");
+      if (codeElement) {
+        navigator.clipboard.writeText(codeElement.innerText).then(() => {
+          const btnText = copyBtn.querySelector(".copy-text");
+          const btnIcon = copyBtn.querySelector("svg");
+          
+          copyBtn.classList.add("copied");
+          if (btnText) btnText.textContent = "Copied!";
+          
+          const originalIconHtml = btnIcon.outerHTML;
+          btnIcon.outerHTML = `<svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>`;
+          
+          setTimeout(() => {
+            copyBtn.classList.remove("copied");
+            const newIcon = copyBtn.querySelector("svg");
+            if (newIcon) {
+              newIcon.outerHTML = originalIconHtml;
+            }
+            if (btnText) btnText.textContent = "Copy";
+          }, 2000);
+        });
+      }
+    });
+  }
 });

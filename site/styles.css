@@ -990,13 +990,57 @@ h1 {
   background: var(--panel);
 }
 
+@keyframes command-bg-drift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 .command-panel {
+  position: relative;
   border: 1px solid rgba(155, 228, 223, 0.24);
-  background: #070a0f;
+  background: 
+    linear-gradient(125deg, #070a0f, #0d131f, #070a0f);
+  background-size: 200% 200%;
+  animation: command-bg-drift 10s ease infinite;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  transition: border-color 220ms ease;
+}
+
+.command-panel:hover {
+  border-color: rgba(155, 228, 223, 0.48);
+}
+
+/* Mouse-following spotlight overlay */
+.command-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    400px circle at var(--cursor-x, 50%) var(--cursor-y, 50%),
+    rgba(155, 228, 223, 0.14),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.command-panel:hover::before {
+  opacity: 1;
 }
 
 .command-panel pre {
+  position: relative;
+  z-index: 1;
   margin: 0;
   padding: 28px;
   overflow-x: auto;
@@ -1006,6 +1050,47 @@ h1 {
 
 .command-panel code {
   white-space: pre;
+}
+
+.copy-button {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(13, 18, 29, 0.72);
+  border: 1px solid rgba(155, 228, 223, 0.24);
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 180ms ease;
+  backdrop-filter: blur(4px);
+}
+
+.copy-button:hover {
+  color: var(--cyan);
+  border-color: rgba(155, 228, 223, 0.6);
+  background: rgba(13, 18, 29, 0.9);
+}
+
+.copy-button:active {
+  transform: scale(0.96);
+}
+
+.copy-button svg {
+  stroke: currentColor;
+  transition: transform 180ms ease;
+}
+
+.copy-button.copied {
+  color: var(--green);
+  border-color: rgba(166, 226, 46, 0.4);
 }
 
 .showcase {
