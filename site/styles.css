@@ -1233,15 +1233,15 @@ h1 {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 24px;
   width: min-content;
   max-width: 100%;
   overflow: hidden;
 }
 
 .footer-logo-img {
-  width: clamp(64px, 10vw, 96px);
-  height: clamp(64px, 10vw, 96px);
+  width: clamp(90px, 12vw, 160px);
+  height: clamp(90px, 12vw, 160px);
   flex-shrink: 0;
 }
 
