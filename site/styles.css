@@ -1284,6 +1284,7 @@ h1 {
 .footer-meta {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 18px;
   font-size: 15px;
 }
@@ -1444,9 +1445,7 @@ h1 {
     min-height: 104px;
   }
 
-  .footer-meta {
-    flex-direction: column;
-  }
+
 }
 
 @media (max-width: 420px) {
