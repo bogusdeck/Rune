@@ -275,10 +275,35 @@ a {
   position: relative;
   z-index: 3;
   flex: 0 0 auto;
-  width: min(480px, 100%);
+  width: min(520px, 100%);
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+.hero-ascii {
+  margin: 0 0 20px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: clamp(7px, 1.4vw, 18px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  white-space: pre;
+  background: linear-gradient(
+    105deg,
+    var(--magenta) 0%,
+    #ff98f8 34%,
+    #ffffff 46%,
+    #ffd8fb 52%,
+    var(--magenta) 66%,
+    #d95dff 100%
+  );
+  background-size: 260% 100%;
+  background-position: 160% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: footer-text-shine 3.8s linear infinite;
 }
 
 .eyebrow {
@@ -300,8 +325,17 @@ h3 {
 h1 {
   margin: 0;
   max-width: 760px;
-  font-size: clamp(54px, 8vw, 118px);
+  font-size: clamp(48px, 7.5vw, 108px);
   line-height: 0.91;
+}
+
+.hero-subtitle {
+  margin: 0 0 8px;
+  font-size: clamp(16px, 2vw, 24px);
+  line-height: 1.35;
+  color: var(--soft);
+  font-weight: 500;
+  max-width: 480px;
 }
 
 .hero-row {
@@ -1457,7 +1491,7 @@ h1 {
   }
 
   h1 {
-    font-size: clamp(42px, 13vw, 62px);
+    font-size: clamp(38px, 12vw, 58px);
   }
 
   .hero-copy {
@@ -1509,7 +1543,7 @@ h1 {
   }
 
   h1 {
-    font-size: clamp(38px, 15vw, 54px);
+    font-size: clamp(34px, 14vw, 50px);
   }
 
   .hero-actions {
