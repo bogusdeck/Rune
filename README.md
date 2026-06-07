@@ -127,6 +127,18 @@ OLLAMA_NO_CLOUD=1
 
 ## Installation
 
+### Automatic (Recommended)
+
+Run the installation script to build and install Rune globally:
+
+```bash
+git clone https://github.com/bogusdeck/Rune
+cd Rune
+./install.sh
+```
+
+### Manual
+
 Clone the repository and build from source:
 
 ```bash
@@ -135,20 +147,22 @@ cd Rune
 go build -o rune .
 ```
 
-## Usage
-
-Run the app:
-
+To run it locally:
 ```bash
 ./rune
 ```
 
-If someone installs the project on a new laptop, this is the expected workflow:
+## Usage
+
+If you used the **Automatic** installation, you can launch Rune from any directory:
 
 ```bash
-git clone https://github.com/bogusdeck/Rune
-cd Rune
-go build -o rune .
+rune
+```
+
+If you chose the **Manual** path and kept the binary in the project folder, run:
+
+```bash
 ./rune
 ```
 
